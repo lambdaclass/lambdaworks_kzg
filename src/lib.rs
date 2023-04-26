@@ -3,7 +3,10 @@
 pub mod commitments;
 pub mod math;
 
+use math::{polynomial::Polynomial, traits::ByteConversion};
 use std::marker;
+
+use commitments::kzg::FrElement;
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -151,6 +154,13 @@ pub struct KZGSettings<'a> {
 }
 
 #[no_mangle]
+/// Convert a blob to a KZG commitment.
+///
+/// # Params
+///
+/// * `out` -  The resulting commitment
+/// * `blob` - The blob representing the polynomial to be committed to
+/// * `s`    - The trusted setup
 pub extern "C" fn blob_to_kzg_commitment(
     out: *mut KZGCommitment,
     blob: *const Blob,
@@ -213,4 +223,22 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
     s: *const KZGSettings,
 ) -> C_KZG_RET {
     todo!()
+}
+
+#[allow(dead_code)]
+fn blob_to_polynomial(
+    blob: *const Blob,
+) -> Result<Polynomial<FrElement>, crate::math::errors::ByteConversionError>
+where
+    FrElement: ByteConversion,
+{
+    let input_blob = unsafe { *blob };
+    let mut coefficients = Vec::new();
+
+    for elem_bytes in input_blob.chunks(BYTES_PER_FIELD_ELEMENT) {
+        let f = FrElement::from_bytes_le(elem_bytes)?;
+        coefficients.push(f);
+    }
+
+    Ok(Polynomial::new(&coefficients))
 }
