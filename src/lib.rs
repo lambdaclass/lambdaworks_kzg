@@ -148,7 +148,8 @@ pub struct KZGSettings<'a> {
     _marker3: marker::PhantomData<&'a *mut g2_t>,
 }
 
-pub fn blob_to_kzg_commitment(
+#[no_mangle]
+pub extern "C" fn blob_to_kzg_commitment(
     out: *mut KZGCommitment,
     blob: *const Blob,
     s: *const KZGSettings,
@@ -156,7 +157,8 @@ pub fn blob_to_kzg_commitment(
     todo!()
 }
 
-pub fn compute_kzg_proof(
+#[no_mangle]
+pub extern "C" fn compute_kzg_proof(
     proof_out: *mut KZGProof,
     y_out: *mut Bytes32,
     blob: *const Blob,
@@ -166,7 +168,8 @@ pub fn compute_kzg_proof(
     todo!()
 }
 
-pub fn compute_blob_kzg_proof(
+#[no_mangle]
+pub extern "C" fn compute_blob_kzg_proof(
     out: *mut KZGProof,
     blob: *const Blob,
     commitment_bytes: *const Bytes48,
@@ -175,7 +178,8 @@ pub fn compute_blob_kzg_proof(
     todo!()
 }
 
-pub fn verify_kzg_proof(
+#[no_mangle]
+pub extern "C" fn verify_kzg_proof(
     ok: *mut bool,
     commitment_bytes: *const Bytes48,
     z_bytes: *const Bytes32,
@@ -186,7 +190,8 @@ pub fn verify_kzg_proof(
     todo!()
 }
 
-pub fn verify_blob_kzg_proof(
+#[no_mangle]
+pub extern "C" fn verify_blob_kzg_proof(
     ok: *mut bool,
     blob: *const Blob,
     commitment_bytes: *const Bytes48,
@@ -196,7 +201,8 @@ pub fn verify_blob_kzg_proof(
     todo!()
 }
 
-pub fn verify_blob_kzg_proof_batch(
+#[no_mangle]
+pub extern "C" fn verify_blob_kzg_proof_batch(
     ok: *mut bool,
     blobs: *const Blob,
     commitments_bytes: *const Bytes48,
