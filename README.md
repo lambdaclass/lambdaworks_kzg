@@ -1,2 +1,2 @@
-# lambdaworks_kzg
+# LambdaWorks KZG
 Barrani KZG
