@@ -1,5 +1,5 @@
-pub mod math;
 pub mod commitments;
+pub mod math;
 
 fn main() {
     println!("Hello, world!");
