@@ -146,44 +146,46 @@ impl<F: IsPrimeField, P: IsPairing> IsCommitmentScheme<F> for KateZaveruchaGoldb
     }
 }
 
+use crate::math::{
+    elliptic_curve::short_weierstrass::{
+        curves::bls12_381::{curve::BLS12381Curve, pairing::BLS12381AtePairing},
+        point::ShortWeierstrassProjectivePoint,
+    },
+    field::fields::montgomery_backed_prime_fields::{IsModulus, MontgomeryBackendPrimeField},
+    unsigned_integer::element::U256,
+};
+
+#[derive(Clone, Debug)]
+pub struct FrConfig;
+impl IsModulus<U256> for FrConfig {
+    const MODULUS: U256 =
+        U256::from("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
+}
+
+pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
+pub type FrField = MontgomeryBackendPrimeField<FrConfig, 4>;
+pub type FrElement = FieldElement<FrField>;
+#[allow(clippy::upper_case_acronyms)]
+pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
+
 #[cfg(test)]
 mod tests {
+    use super::StructuredReferenceString;
+    use super::{FrElement, G1, KZG};
+    use crate::commitments::traits::IsCommitmentScheme;
     use crate::math::{
         cyclic_group::IsGroup,
         elliptic_curve::{
-            short_weierstrass::{
-                curves::bls12_381::{
-                    curve::BLS12381Curve, pairing::BLS12381AtePairing, twist::BLS12381TwistCurve,
-                },
-                point::ShortWeierstrassProjectivePoint,
+            short_weierstrass::curves::bls12_381::{
+                curve::BLS12381Curve, pairing::BLS12381AtePairing, twist::BLS12381TwistCurve,
             },
             traits::{IsEllipticCurve, IsPairing},
         },
-        field::{
-            element::FieldElement,
-            fields::montgomery_backed_prime_fields::{IsModulus, MontgomeryBackendPrimeField},
-        },
+        field::element::FieldElement,
         polynomial::Polynomial,
         unsigned_integer::element::U256,
     };
-
-    use crate::commitments::traits::IsCommitmentScheme;
-
-    use super::{KateZaveruchaGoldberg, StructuredReferenceString};
     use rand::Rng;
-
-    #[derive(Clone, Debug)]
-    pub struct FrConfig;
-    impl IsModulus<U256> for FrConfig {
-        const MODULUS: U256 =
-            U256::from("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
-    }
-
-    type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
-    type FrField = MontgomeryBackendPrimeField<FrConfig, 4>;
-    type FrElement = FieldElement<FrField>;
-    #[allow(clippy::upper_case_acronyms)]
-    type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 
     fn create_srs() -> StructuredReferenceString<
         <BLS12381AtePairing as IsPairing>::G1Point,
