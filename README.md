@@ -1,4 +1,5 @@
-# KZG
+# LambdaWorks KZG
+Barrani KZG
 
 ## Notes
 
