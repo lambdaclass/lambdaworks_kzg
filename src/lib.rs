@@ -2,6 +2,7 @@
 
 pub mod commitments;
 pub mod math;
+pub mod utils;
 
 use math::{polynomial::Polynomial, traits::ByteConversion};
 use std::marker;
