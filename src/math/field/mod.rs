@@ -8,5 +8,7 @@ pub mod fields;
 pub mod test_fields;
 /// Common behaviour for field elements.
 pub mod traits;
+/// Everything needed for finding square roots of field elements.
+pub mod sqrt;
 
 pub mod errors;
