@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Lines},
 };
 
 use crate::math::{
@@ -62,30 +62,26 @@ pub fn load_trusted_setup_file(input: &mut File) -> Result<SRS, KzgError> {
     let mut input_lines = BufReader::new(input).lines();
 
     /* Read the number of g1 points */
-    let read_buf = input_lines.next().unwrap().unwrap();
-    check!(
-        read_buf.parse::<u64>().unwrap(),
-        TRUSTED_SETUP_NUM_G1_POINTS as u64
-    )?;
+    let read_buf = read_line(&mut input_lines)?;
+    let num_g1_points = hex_to_u64(&read_buf)?;
+    check!(num_g1_points, TRUSTED_SETUP_NUM_G1_POINTS as u64)?;
 
     /* Read the number of g2 points */
-    let read_buf = input_lines.next().unwrap().unwrap();
-    check!(
-        read_buf.parse::<u64>().unwrap(),
-        TRUSTED_SETUP_NUM_G2_POINTS as u64
-    )?;
+    let read_buf = read_line(&mut input_lines)?;
+    let num_g2_points = hex_to_u64(&read_buf)?;
+    check!(num_g2_points, TRUSTED_SETUP_NUM_G2_POINTS as u64)?;
 
     // gi points are expressed in hex, so each byte takes 2 chars
     // Read all of the g1 points, byte by byte
     for _ in 0..g1_bytes.capacity() {
-        let line = input_lines.next().unwrap().unwrap();
+        let line = read_line(&mut input_lines)?;
         check!(line.len(), BYTES_PER_G1 * 2)?;
         g1_bytes.push(line);
     }
 
     /* Read all of the g2 points, byte by byte */
     for _ in 0..g1_bytes.capacity() {
-        let line = input_lines.next().unwrap().unwrap();
+        let line = read_line(&mut input_lines)?;
         check!(line.len(), BYTES_PER_G2 * 2)?;
         g2_bytes.push(line);
     }
@@ -93,15 +89,25 @@ pub fn load_trusted_setup_file(input: &mut File) -> Result<SRS, KzgError> {
     load_trusted_setup(&g1_bytes, &g2_bytes)
 }
 
+fn read_line(input_lines: &mut Lines<BufReader<&mut File>>) -> Result<String, KzgError> {
+    let next_line_result = input_lines.next().ok_or(KzgError::BadArgs)?;
+
+    next_line_result.map_err(|_| KzgError::BadArgs)
+}
+
+fn hex_to_u64(hex: &str) -> Result<u64, KzgError> {
+    hex.parse::<u64>().map_err(|_| KzgError::BadArgs)
+}
+
 fn load_trusted_setup(g1_bytes: &[String], g2_bytes: &[String]) -> Result<SRS, KzgError> {
     let g1_points = g1_bytes
         .iter()
-        .map(|g1_hex| hex_to_g1_point(g1_hex).unwrap())
-        .collect::<Vec<G1>>();
+        .map(|g1_hex| hex_to_g1_point(g1_hex))
+        .collect::<Result<Vec<G1>, KzgError>>()?;
     let g2_points = g2_bytes
         .iter()
-        .map(|g2_hex| hex_to_g2_point(g2_hex).unwrap())
-        .collect::<Vec<G2>>();
+        .map(|g2_hex| hex_to_g2_point(g2_hex))
+        .collect::<Result<Vec<G2>, KzgError>>()?;
     let g2_points = [g2_points[0].clone(), g2_points[1].clone()];
 
     Ok(SRS::new(&g1_points, &g2_points))
@@ -113,9 +119,7 @@ fn hex_to_g1_point(hex: &str) -> Result<G1, KzgError> {
         FieldElement<BLS12381PrimeField>,
     ) = uncompress_g1_point(hex)?;
 
-    let g1_point = BLS12381Curve::create_point_from_affine(x, y)
-        .ok()
-        .ok_or(KzgError::BadArgs)?;
+    let g1_point = BLS12381Curve::create_point_from_affine(x, y).map_err(|_| KzgError::BadArgs)?;
 
     if g1_point == ShortWeierstrassProjectivePoint::neutral_element() {
         return Ok(g1_point);
@@ -150,9 +154,7 @@ fn hex_to_g2_point(hex: &str) -> Result<G2, KzgError> {
         FieldElement<Degree2ExtensionField>,
     ) = uncompress_g2_point(hex)?;
 
-    BLS12381TwistCurve::create_point_from_affine(x, y)
-        .ok()
-        .ok_or(KzgError::BadArgs)
+    BLS12381TwistCurve::create_point_from_affine(x, y).map_err(|_| KzgError::BadArgs)
 }
 
 fn uncompress_g2_point(
