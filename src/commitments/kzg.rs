@@ -1,3 +1,5 @@
+pub mod error;
+
 use crate::math::{
     cyclic_group::IsGroup,
     elliptic_curve::traits::IsPairing,
