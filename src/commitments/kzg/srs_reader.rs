@@ -1,8 +1,27 @@
-use std::{fs::File, io::Read};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+};
 
 use crate::commitments::kzg::StructuredReferenceString;
 
 use super::error::KzgError;
+
+macro_rules! check {
+    ($cond:expr) => {
+        ($cond).then_some(()).ok_or_else(|| {
+            dbg!($cond);
+            KzgError::BadArgs
+        })
+    };
+    ($one:expr, $other:expr) => {
+        ($one == $other).then_some(()).ok_or_else(|| {
+            dbg!($one);
+            dbg!($other);
+            KzgError::BadArgs
+        })
+    };
+}
 
 // TODO: This should be an env var
 const FIELD_ELEMENTS_PER_BLOB: usize = 4;
@@ -26,62 +45,45 @@ const BYTES_PER_G2: usize = 96;
 pub fn load_trusted_setup_file<G1Point, G2Point>(
     input: &mut File,
 ) -> Result<StructuredReferenceString<G1Point, G2Point>, KzgError> {
-    let mut num_bytes_read: usize;
-    let mut read_buf = [0_u8; 8];
-    let mut gi_byte_hex = [0_u8; 2];
-    let mut g1_bytes = [0_u8; TRUSTED_SETUP_NUM_G1_POINTS * BYTES_PER_G1];
-    let mut g2_bytes = [0_u8; TRUSTED_SETUP_NUM_G2_POINTS * BYTES_PER_G2];
+    let mut g1_bytes = Vec::with_capacity(TRUSTED_SETUP_NUM_G1_POINTS);
+    let mut g2_bytes = Vec::with_capacity(TRUSTED_SETUP_NUM_G2_POINTS);
+    let mut input_lines = BufReader::new(input).lines();
 
     /* Read the number of g1 points */
-    num_bytes_read = read_file(input, &mut read_buf)?;
-    check(
-        num_bytes_read == 1 && u64::from_be_bytes(read_buf) == TRUSTED_SETUP_NUM_G1_POINTS as u64,
+    let read_buf = input_lines.next().unwrap().unwrap();
+    check!(
+        u64::from_str_radix(&read_buf, 10).unwrap(),
+        TRUSTED_SETUP_NUM_G1_POINTS as u64
     )?;
 
     /* Read the number of g2 points */
-    num_bytes_read = read_file(input, &mut read_buf)?;
-    check(
-        num_bytes_read == 1 && u64::from_be_bytes(read_buf) == TRUSTED_SETUP_NUM_G2_POINTS as u64,
+    let read_buf = input_lines.next().unwrap().unwrap();
+    check!(
+        u64::from_str_radix(&read_buf, 10).unwrap(),
+        TRUSTED_SETUP_NUM_G2_POINTS as u64
     )?;
 
-    /* Read all of the g1 points, byte by byte */
-    for g1_byte in g1_bytes.iter_mut() {
-        num_bytes_read = read_file(input, &mut gi_byte_hex)?;
-        check(num_bytes_read == 2)?;
-        *g1_byte = hex_bytes_to_u8(gi_byte_hex)?;
+    // gi points are expressed in hex, so each byte takes 2 chars
+    // Read all of the g1 points, byte by byte
+    for _ in 0..g1_bytes.capacity() {
+        let line = input_lines.next().unwrap().unwrap();
+        check!(line.len(), BYTES_PER_G1 * 2)?;
+        g1_bytes.push(line);
     }
 
     /* Read all of the g2 points, byte by byte */
-    for g2_byte in g2_bytes.iter_mut() {
-        num_bytes_read = read_file(input, &mut gi_byte_hex)?;
-        check(num_bytes_read == 2)?;
-        *g2_byte = hex_bytes_to_u8(gi_byte_hex)?;
+    for _ in 0..g1_bytes.capacity() {
+        let line = input_lines.next().unwrap().unwrap();
+        check!(line.len(), BYTES_PER_G2 * 2)?;
+        g2_bytes.push(line);
     }
 
     load_trusted_setup(&g1_bytes, &g2_bytes)
 }
 
 fn load_trusted_setup<G1Point, G2Point>(
-    _g1_bytes: &[u8],
-    _g2_bytes: &[u8],
+    _g1_bytes: &[String],
+    _g2_bytes: &[String],
 ) -> Result<StructuredReferenceString<G1Point, G2Point>, KzgError> {
     todo!()
-}
-
-fn read_file(file: &mut File, buf: &mut [u8]) -> Result<usize, KzgError> {
-    match file.read(buf) {
-        Ok(num_bytes) => Ok(num_bytes),
-        Err(_) => Err(KzgError::BadArgs),
-    }
-}
-
-fn check(condition: bool) -> Result<(), KzgError> {
-    condition.then_some(()).ok_or(KzgError::BadArgs)
-}
-
-fn hex_bytes_to_u8(hex: [u8; 2]) -> Result<u8, KzgError> {
-    String::from_utf8(hex.to_vec())
-        .ok()
-        .and_then(|hex_str| u8::from_str_radix(&hex_str, 16).ok())
-        .ok_or(KzgError::BadArgs)
 }

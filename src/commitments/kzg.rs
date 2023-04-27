@@ -173,6 +173,10 @@ pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use std::path::PathBuf;
+
+    use super::srs_reader::load_trusted_setup_file;
     use super::StructuredReferenceString;
     use super::{FrElement, G1, KZG};
     use crate::commitments::traits::IsCommitmentScheme;
@@ -217,9 +221,37 @@ mod tests {
         StructuredReferenceString::new(&powers_main_group, &powers_secondary_group)
     }
 
+    fn load_srs_from_file() -> StructuredReferenceString<
+        <BLS12381AtePairing as IsPairing>::G1Point,
+        <BLS12381AtePairing as IsPairing>::G2Point,
+    > {
+        let mut srs_file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        srs_file_path.push("res/test/trusted_setup_4.txt");
+        let mut srs_file = File::open(&srs_file_path)
+            .expect(&format!("Failed to load {}", srs_file_path.display()));
+
+        load_trusted_setup_file(&mut srs_file).expect(&format!(
+            "Failed to load SRS from file {}",
+            srs_file_path.display()
+        ))
+    }
+
     #[test]
     fn kzg_1() {
         let kzg = KZG::new(create_srs());
+        let p = Polynomial::<FrElement>::new(&[FieldElement::one(), FieldElement::one()]);
+        let p_commitment: <BLS12381AtePairing as IsPairing>::G1Point = kzg.commit(&p);
+        let x = -FieldElement::one();
+        let y = p.evaluate(&x);
+        let proof = kzg.open(&x, &y, &p);
+        assert_eq!(y, FieldElement::zero());
+        assert_eq!(proof, BLS12381Curve::generator());
+        assert!(kzg.verify(&x, &y, &p_commitment, &proof));
+    }
+
+    #[test]
+    fn kzg_from_file() {
+        let kzg = KZG::new(load_srs_from_file());
         let p = Polynomial::<FrElement>::new(&[FieldElement::one(), FieldElement::one()]);
         let p_commitment: <BLS12381AtePairing as IsPairing>::G1Point = kzg.commit(&p);
         let x = -FieldElement::one();
