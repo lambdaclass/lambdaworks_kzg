@@ -4,19 +4,35 @@ pub mod commitments;
 pub mod math;
 pub mod utils;
 
-use commitments::kzg::FrElement;
+use commitments::kzg::{FrElement, StructuredReferenceString, G1};
 use math::{
-    elliptic_curve::short_weierstrass::{
-        curves::bls12_381::{curve::BLS12381Curve, field_extension::BLS12381PrimeField},
-        point::ShortWeierstrassProjectivePoint,
+    elliptic_curve::{
+        short_weierstrass::{
+            curves::bls12_381::{
+                curve::BLS12381Curve, field_extension::BLS12381PrimeField,
+                pairing::BLS12381AtePairing, twist::BLS12381TwistCurve,
+            },
+            point::ShortWeierstrassProjectivePoint,
+        },
+        traits::IsPairing,
     },
+    errors::ByteConversionError,
     field::element::FieldElement,
     polynomial::Polynomial,
     traits::ByteConversion,
+    unsigned_integer::element::U256,
 };
-use std::marker;
+use rand::Rng;
+use std::{marker, mem::size_of, slice};
+
+use crate::math::{
+    cyclic_group::IsGroup,
+    elliptic_curve::traits::{FromAffine, IsEllipticCurve},
+};
 
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
+pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
+
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
 
 #[allow(non_camel_case_types)]
@@ -147,6 +163,7 @@ pub struct FFTSettings<'a> {
     _marker: marker::PhantomData<&'a *mut fr_t>,
 }
 
+#[derive(Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct KZGSettings<'a> {
@@ -210,7 +227,43 @@ pub extern "C" fn verify_kzg_proof(
     proof_bytes: *const Bytes48,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
-    todo!()
+    unsafe {
+        *ok = false;
+    }
+    let mut commitment_slice = unsafe { *commitment_bytes };
+    let z_slice = unsafe { *z_bytes };
+    let y_slice = unsafe { *y_bytes };
+    let mut proof_slice = unsafe { *proof_bytes };
+    let s_struct = unsafe { (*s).clone() };
+
+    let Ok(commitment_g1) = get_point_from_bytes(&mut commitment_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let Ok(z_fr) = FrElement::from_bytes_be(&z_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let Ok(y_fr) = FrElement::from_bytes_be(&y_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let Ok(proof_g1) = get_point_from_bytes(&mut proof_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    // verify pairing
+    let Ok(ret) = verify_kzg_proof_impl(&commitment_g1, &z_fr, &y_fr, &proof_g1, &s_struct) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    if ret {
+        unsafe {
+            *ok = true;
+        }
+    }
+
+    C_KZG_RET::C_KZG_OK
 }
 
 #[no_mangle]
@@ -252,4 +305,109 @@ where
     }
 
     Ok(Polynomial::new(&coefficients))
+}
+
+fn get_point_from_bytes(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteConversionError> {
+    let first_byte = input_bytes.first().unwrap();
+
+    // We get the first 3 bits t
+    let prefix_bits = first_byte >> 5;
+
+    // let _first_bit = prefix_bits & 4_u8;
+    let second_bit = prefix_bits & 2_u8;
+    let third_bit = prefix_bits & 1_u8;
+
+    if second_bit == 1 {
+        return Ok(G1Point::neutral_element());
+    }
+    let first_byte_without_contorl_bits = (first_byte << 3) >> 3;
+    input_bytes[0] = first_byte_without_contorl_bits;
+
+    let x = BLS12381FieldElement::from_bytes_be(input_bytes)?;
+
+    // We apply the elliptic curve formula to know the y^2 value.
+    let y_squared = x.pow(3_u16) + BLS12381FieldElement::from(4);
+    // TODO: Use optimized sqrt function
+    let y = y_squared.inv().pow(2_u16);
+
+    let point = G1Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)?;
+
+    if utils::check_point_is_in_subgroup(&point) {
+        Ok(point)
+    } else {
+        Err(ByteConversionError::PointNotInSubgroup)
+    }
+
+    // * sacar los 3 bits mas significativos y guardarlos
+    // el segundo indica si es el punto en el infinito
+    // el terceer bit más significativo sirve para la raiz cuadrada
+    // armo el field element from bytes big endian -> x
+
+    // con x, hago la raíz cuadrada de (x^3 + 4)
+    // tengo 2 raíces cuadradas, el 3er bit mas significativo,
+    // me dice cuál obtener
+
+    // creo el punto nuevo con el método g1_point = new_affine(x, y);
+
+    // DONE!!!
+    // chequear que el punto esté en el subgrupo:
+    // se lo hace multiplicando el punto por el valor del módulo
+    // si da el punto en el infinito, pertenece al subgrupo
+    //
+
+    // sacar los 3 bits
+    // let a = BLS12381FieldElement::from_bytes_be(&input_bytes);
+    //todo!()
+}
+
+fn verify_kzg_proof_impl(
+    commitment: &G1Point,
+    z_fr: &FrElement,
+    y_fr: &FrElement,
+    proof_g1: &G1Point,
+    s_struct: &KZGSettings,
+) -> Result<bool, C_KZG_RET> {
+    let src = create_srs();
+
+    // let g2_gen = BLS12381TwistCurve::generator();
+    // let x_g2 = g2_gen.operate_with_self(z_fr.representative());
+
+    // let s_g2_values =
+    //     unsafe { slice::from_raw_parts(s_struct.g2_values, std::mem::size_of::<g2_t>()) };
+
+    // let s_g2_values_1 = s_g2_values[1];
+
+    // let X_minus_z = s_g2_values - x_g2;
+
+    todo!()
+}
+
+fn create_srs() -> StructuredReferenceString<
+    <BLS12381AtePairing as IsPairing>::G1Point,
+    <BLS12381AtePairing as IsPairing>::G2Point,
+> {
+    let mut rng = rand::thread_rng();
+    let toxic_waste = FrElement::new(U256 {
+        limbs: [
+            rng.gen::<u64>(),
+            rng.gen::<u64>(),
+            rng.gen::<u64>(),
+            rng.gen::<u64>(),
+        ],
+    });
+    let g1 = BLS12381Curve::generator();
+    let g2 = BLS12381TwistCurve::generator();
+    let powers_main_group: Vec<G1> = (0..100)
+        .map(|exponent| g1.operate_with_self(toxic_waste.pow(exponent as u128).representative()))
+        .collect();
+    let powers_secondary_group = [
+        g2.clone(),
+        g2.operate_with_self(toxic_waste.representative()),
+    ];
+    StructuredReferenceString::new(&powers_main_group, &powers_secondary_group)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
 }

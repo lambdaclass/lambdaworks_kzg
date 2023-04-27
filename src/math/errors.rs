@@ -6,4 +6,8 @@ pub enum ByteConversionError {
     FromBEBytesError,
     #[error("from_le_bytes failed")]
     FromLEBytesError,
+    #[error("Invalid value")]
+    InvalidValue,
+    #[error("The point is not in the subgroup")]
+    PointNotInSubgroup,
 }
