@@ -4,10 +4,20 @@ pub mod commitments;
 pub mod math;
 pub mod utils;
 
-use math::{polynomial::Polynomial, traits::ByteConversion};
+use commitments::kzg::FrElement;
+use math::{
+    elliptic_curve::short_weierstrass::{
+        curves::bls12_381::{curve::BLS12381Curve, field_extension::BLS12381PrimeField},
+        point::ShortWeierstrassProjectivePoint,
+    },
+    field::element::FieldElement,
+    polynomial::Polynomial,
+    traits::ByteConversion,
+};
 use std::marker;
 
-use commitments::kzg::FrElement;
+pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
+pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
