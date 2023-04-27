@@ -1,4 +1,5 @@
 pub mod error;
+pub mod srs_reader;
 
 use crate::math::{
     cyclic_group::IsGroup,
