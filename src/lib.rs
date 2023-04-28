@@ -1,22 +1,31 @@
 #![allow(unused_variables)]
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 pub mod commitments;
 pub mod math;
 pub mod utils;
 
-use commitments::kzg::FrElement;
+use commitments::{
+    kzg::{FrElement, FrField, KateZaveruchaGoldberg},
+    traits::IsCommitmentScheme,
+};
 use math::{
     elliptic_curve::short_weierstrass::{
-        curves::bls12_381::{curve::BLS12381Curve, field_extension::BLS12381PrimeField},
+        curves::bls12_381::{
+            curve::BLS12381Curve, field_extension::BLS12381PrimeField, pairing::BLS12381AtePairing,
+            twist::BLS12381TwistCurve,
+        },
         point::ShortWeierstrassProjectivePoint,
     },
     field::element::FieldElement,
-    polynomial::Polynomial,
     traits::ByteConversion,
 };
 use std::marker;
 
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
+pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
+pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
+
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
 
 #[allow(non_camel_case_types)]
@@ -147,6 +156,7 @@ pub struct FFTSettings<'a> {
     _marker: marker::PhantomData<&'a *mut fr_t>,
 }
 
+#[derive(Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct KZGSettings<'a> {
@@ -210,7 +220,42 @@ pub extern "C" fn verify_kzg_proof(
     proof_bytes: *const Bytes48,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
-    todo!()
+    unsafe {
+        *ok = false;
+    }
+    let mut commitment_slice = unsafe { *commitment_bytes };
+    let z_slice = unsafe { *z_bytes };
+    let y_slice = unsafe { *y_bytes };
+    let mut proof_slice = unsafe { *proof_bytes };
+    let s_struct = unsafe { (*s).clone() };
+
+    let Ok(commitment_g1) = utils::get_point_from_bytes(&mut commitment_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let Ok(z_fr) = FrElement::from_bytes_be(&z_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let Ok(y_fr) = FrElement::from_bytes_be(&y_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let Ok(proof_g1) = utils::get_point_from_bytes(&mut proof_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    // FIXME: We should not use create_src() for this instantiation.
+    let kzg = KZG::new(utils::create_srs());
+    let ret = kzg.verify(&z_fr, &y_fr, &commitment_g1, &proof_g1);
+
+    if ret {
+        unsafe {
+            *ok = true;
+        }
+    }
+
+    C_KZG_RET::C_KZG_OK
 }
 
 #[no_mangle]
@@ -221,6 +266,22 @@ pub extern "C" fn verify_blob_kzg_proof(
     proof_bytes: *const Bytes48,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
+    unsafe {
+        *ok = false;
+    }
+    let mut commitment_slice = unsafe { *commitment_bytes };
+    let mut proof_slice = unsafe { *proof_bytes };
+    let s_struct = unsafe { (*s).clone() };
+
+    let Ok(commitment_g1) = utils::get_point_from_bytes(&mut commitment_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+    let Ok(proof_g1) = utils::get_point_from_bytes(&mut proof_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    // TODO!!! blob
+
     todo!()
 }
 
@@ -234,22 +295,4 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
     s: *const KZGSettings,
 ) -> C_KZG_RET {
     todo!()
-}
-
-#[allow(dead_code)]
-fn blob_to_polynomial(
-    blob: *const Blob,
-) -> Result<Polynomial<FrElement>, crate::math::errors::ByteConversionError>
-where
-    FrElement: ByteConversion,
-{
-    let input_blob = unsafe { *blob };
-    let mut coefficients = Vec::new();
-
-    for elem_bytes in input_blob.chunks(BYTES_PER_FIELD_ELEMENT) {
-        let f = FrElement::from_bytes_le(elem_bytes)?;
-        coefficients.push(f);
-    }
-
-    Ok(Polynomial::new(&coefficients))
 }
