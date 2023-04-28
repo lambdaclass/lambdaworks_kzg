@@ -1,5 +1,3 @@
-use std::ops::Neg;
-
 use crate::commitments::kzg::{FrElement, StructuredReferenceString, G1};
 use crate::math::cyclic_group::IsGroup;
 use crate::math::elliptic_curve::traits::{FromAffine, IsEllipticCurve};
@@ -18,6 +16,7 @@ use crate::math::{
 use crate::G1Point;
 use crate::{BLS12381FieldElement, BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT};
 use rand::Rng;
+use std::ops::Neg;
 
 const MODULUS: U256 =
     U256::from("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
