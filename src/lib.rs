@@ -22,6 +22,8 @@ use math::{
 };
 use std::marker;
 
+use crate::utils::compress_g1_point;
+
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
 pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
@@ -215,21 +217,19 @@ pub extern "C" fn compute_kzg_proof(
 
     // FIXME: We should not use create_src() for this instantiation.
     let kzg = KZG::new(utils::create_srs());
-
     let proof = kzg.open(&fr_z, &fr_y, &poly);
+    let Ok(compressed_proof) = compress_g1_point(&proof) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+    let Ok(compressed_proof_slice): Result<[u8; 48], _> = compressed_proof.try_into() else {
+        return C_KZG_RET::C_KZG_ERROR; 
+    };
 
-    /*
-    C_KZG_RET ret;
-    Polynomial p;
-    g1_t commitment;
+    unsafe {
+        std::ptr::copy(compressed_proof_slice.as_ptr(), proof_out as *mut u8, BYTES_PER_PROOF);
+    }
 
-    ret = poly_to_kzg_commitment(&commitment, &p, s);
-    if (ret != C_KZG_OK) return ret;
-    bytes_from_g1(out, &commitment);
-    return C_KZG_OK;
-    */
-
-    todo!()
+    C_KZG_RET::C_KZG_OK
 }
 
 #[no_mangle]
@@ -260,7 +260,7 @@ pub extern "C" fn verify_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = utils::get_point_from_bytes(&mut commitment_slice) else {
+    let Ok(commitment_g1) = utils::decompress_g1_point(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -272,7 +272,7 @@ pub extern "C" fn verify_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let Ok(proof_g1) = utils::get_point_from_bytes(&mut proof_slice) else {
+    let Ok(proof_g1) = utils::decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -304,10 +304,10 @@ pub extern "C" fn verify_blob_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = utils::get_point_from_bytes(&mut commitment_slice) else {
+    let Ok(commitment_g1) = utils::decompress_g1_point(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
-    let Ok(proof_g1) = utils::get_point_from_bytes(&mut proof_slice) else {
+    let Ok(proof_g1) = utils::decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
