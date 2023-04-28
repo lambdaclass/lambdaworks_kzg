@@ -10,6 +10,8 @@
 
 </div>
 
+This is an ABI compatible for KZG EIP-4844 in Rust (see [here](https://github.com/ethereum/c-kzg-4844) for the original C implementation). 
+
 If you use ```Lambdaworks``` libraries in your research projects, please cite them using the following template:
 
 ```
@@ -20,8 +22,6 @@ If you use ```Lambdaworks``` libraries in your research projects, please cite th
   year={2023}
 }
 ```
-
-This is an ABI compatible for KZG EIP-4844 in Rust (see [here](https://github.com/ethereum/c-kzg-4844) for the original C implementation). 
 
 ## Notes
 
