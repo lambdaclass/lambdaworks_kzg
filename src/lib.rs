@@ -198,6 +198,37 @@ pub extern "C" fn compute_kzg_proof(
     z_bytes: *const Bytes32,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
+    let z_slice = unsafe { *z_bytes };
+    let s_struct = unsafe { (*s).clone() };
+    let input_blob: [u8; BYTES_PER_BLOB] =
+        unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
+
+    let Ok(poly) = utils::blob_to_polynomial(&input_blob) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let Ok(fr_z) = FrElement::from_bytes_be(&z_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let fr_y = poly.evaluate(&fr_z);
+
+    // FIXME: We should not use create_src() for this instantiation.
+    let kzg = KZG::new(utils::create_srs());
+
+    let proof = kzg.open(&fr_z, &fr_y, &poly);
+
+    /*
+    C_KZG_RET ret;
+    Polynomial p;
+    g1_t commitment;
+
+    ret = poly_to_kzg_commitment(&commitment, &p, s);
+    if (ret != C_KZG_OK) return ret;
+    bytes_from_g1(out, &commitment);
+    return C_KZG_OK;
+    */
+
     todo!()
 }
 
