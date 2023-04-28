@@ -1,4 +1,5 @@
 #![allow(unused_variables)]
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 pub mod commitments;
 pub mod math;
@@ -277,6 +278,24 @@ pub extern "C" fn verify_blob_kzg_proof(
     proof_bytes: *const Bytes48,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
+
+    unsafe {
+        *ok = false;
+    }
+    let mut commitment_slice = unsafe { *commitment_bytes };
+    let mut proof_slice = unsafe { *proof_bytes };
+    let s_struct = unsafe { (*s).clone() };
+
+    let Ok(commitment_g1) = get_point_from_bytes(&mut commitment_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+    let Ok(proof_g1) = get_point_from_bytes(&mut proof_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    // TODO!!! blob
+
+
     todo!()
 }
 
