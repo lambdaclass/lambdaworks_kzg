@@ -49,10 +49,17 @@ pub fn get_point_from_bytes(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteC
     // We get the first 3 bits t
     let prefix_bits = first_byte >> 5;
 
-    // let _first_bit = prefix_bits & 4_u8;
+    let first_bit = prefix_bits & 4_u8;
+
+    // If first bit is not 1, then the value is not compressed.
+    if first_bit != 1 {
+        return Err(ByteConversionError::InvalidValue);
+    }
     let second_bit = prefix_bits & 2_u8;
     let third_bit = prefix_bits & 1_u8;
 
+    // If the second bit is 1, then the compressed point is the
+    // point at infinity and we return it directly.
     if second_bit == 1 {
         return Ok(G1Point::neutral_element());
     }
@@ -63,7 +70,9 @@ pub fn get_point_from_bytes(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteC
 
     // We apply the elliptic curve formula to know the y^2 value.
     let y_squared = x.pow(3_u16) + BLS12381FieldElement::from(4);
-    let y = sqrt_fr(&y_squared);
+    let y_abs = sqrt_fr(&y_squared);
+
+    let y = if third_bit == 0 { y_abs } else { -y_abs };
 
     let point = G1Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)?;
 
@@ -72,26 +81,6 @@ pub fn get_point_from_bytes(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteC
     } else {
         Err(ByteConversionError::PointNotInSubgroup)
     }
-
-    // * sacar los 3 bits mas significativos y guardarlos
-    // el segundo indica si es el punto en el infinito
-    // el terceer bit más significativo sirve para la raiz cuadrada
-    // armo el field element from bytes big endian -> x
-
-    // con x, hago la raíz cuadrada de (x^3 + 4)
-    // tengo 2 raíces cuadradas, el 3er bit mas significativo,
-    // me dice cuál obtener
-
-    // creo el punto nuevo con el método g1_point = new_affine(x, y);
-
-    // DONE!!!
-    // chequear que el punto esté en el subgrupo:
-    // se lo hace multiplicando el punto por el valor del módulo
-    // si da el punto en el infinito, pertenece al subgrupo
-    //
-
-    // sacar los 3 bits
-    // let a = BLS12381FieldElement::from_bytes_be(&input_bytes);
 }
 
 pub fn sqrt_fr(field: &BLS12381FieldElement) -> BLS12381FieldElement {
