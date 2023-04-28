@@ -14,10 +14,10 @@ This is an ABI compatible for KZG EIP-4844 in Rust (see [here](https://github.co
 If you use ```Lambdaworks``` libraries in your research projects, please cite them using the following template:
 
 ```
-@software{Lambdaworks,
-  author={Lambdaworks contributors},
-  title={Lambdaworks},
-  url={https://github.com/lambdaclass/lambdaworks},
+@software{lambdaworks_kzg,
+  author={lambdaworks_kzg contributors},
+  title={lambdaworks_kzg},
+  url={https://github.com/lambdaclass/lambdaworks_kzg},
   year={2023}
 }
 ```
