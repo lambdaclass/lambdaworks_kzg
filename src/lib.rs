@@ -296,8 +296,3 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
 ) -> C_KZG_RET {
     todo!()
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-}
