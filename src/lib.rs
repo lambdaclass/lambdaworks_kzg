@@ -4,7 +4,10 @@ pub mod commitments;
 pub mod math;
 pub mod utils;
 
-use commitments::kzg::{FrElement, StructuredReferenceString, G1};
+use commitments::{
+    kzg::{self, FrElement, FrField, KateZaveruchaGoldberg, StructuredReferenceString, G1},
+    traits::IsCommitmentScheme,
+};
 use math::{
     elliptic_curve::{
         short_weierstrass::{
@@ -32,6 +35,7 @@ use crate::math::{
 
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
+pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
 
@@ -252,10 +256,9 @@ pub extern "C" fn verify_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    // verify pairing
-    let Ok(ret) = verify_kzg_proof_impl(&commitment_g1, &z_fr, &y_fr, &proof_g1, &s_struct) else {
-        return C_KZG_RET::C_KZG_ERROR;
-    };
+    // FIXME: We should not use create_src() for this instantiation.
+    let kzg = KZG::new(create_srs());
+    let ret = kzg.verify(&z_fr, &y_fr, &commitment_g1, &proof_g1);
 
     if ret {
         unsafe {
@@ -327,8 +330,7 @@ fn get_point_from_bytes(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteConve
 
     // We apply the elliptic curve formula to know the y^2 value.
     let y_squared = x.pow(3_u16) + BLS12381FieldElement::from(4);
-    // TODO: Use optimized sqrt function
-    let y = y_squared.inv().pow(2_u16);
+    let y = sqrt_fr(&y_squared);
 
     let point = G1Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)?;
 
@@ -357,31 +359,14 @@ fn get_point_from_bytes(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteConve
 
     // sacar los 3 bits
     // let a = BLS12381FieldElement::from_bytes_be(&input_bytes);
-    //todo!()
 }
 
-fn verify_kzg_proof_impl(
-    commitment: &G1Point,
-    z_fr: &FrElement,
-    y_fr: &FrElement,
-    proof_g1: &G1Point,
-    s_struct: &KZGSettings,
-) -> Result<bool, C_KZG_RET> {
-    let src = create_srs();
-
-    // let g2_gen = BLS12381TwistCurve::generator();
-    // let x_g2 = g2_gen.operate_with_self(z_fr.representative());
-
-    // let s_g2_values =
-    //     unsafe { slice::from_raw_parts(s_struct.g2_values, std::mem::size_of::<g2_t>()) };
-
-    // let s_g2_values_1 = s_g2_values[1];
-
-    // let X_minus_z = s_g2_values - x_g2;
-
-    todo!()
+fn sqrt_fr(field: &BLS12381FieldElement) -> BLS12381FieldElement {
+    field.inv().pow(2_u32)
 }
 
+/// Helper function to create SRS. Once the deserialization of
+/// the SRS is done, this function should be removed.
 fn create_srs() -> StructuredReferenceString<
     <BLS12381AtePairing as IsPairing>::G1Point,
     <BLS12381AtePairing as IsPairing>::G2Point,
