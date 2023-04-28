@@ -6,33 +6,21 @@ pub mod math;
 pub mod utils;
 
 use commitments::{
-    kzg::{self, FrElement, FrField, KateZaveruchaGoldberg, StructuredReferenceString, G1},
+    kzg::{FrElement, FrField, KateZaveruchaGoldberg},
     traits::IsCommitmentScheme,
 };
 use math::{
-    elliptic_curve::{
-        short_weierstrass::{
-            curves::bls12_381::{
-                curve::BLS12381Curve, field_extension::BLS12381PrimeField,
-                pairing::BLS12381AtePairing, twist::BLS12381TwistCurve,
-            },
-            point::ShortWeierstrassProjectivePoint,
+    elliptic_curve::short_weierstrass::{
+        curves::bls12_381::{
+            curve::BLS12381Curve, field_extension::BLS12381PrimeField, pairing::BLS12381AtePairing,
+            twist::BLS12381TwistCurve,
         },
-        traits::IsPairing,
+        point::ShortWeierstrassProjectivePoint,
     },
-    errors::ByteConversionError,
     field::element::FieldElement,
-    polynomial::Polynomial,
     traits::ByteConversion,
-    unsigned_integer::element::U256,
 };
-use rand::Rng;
-use std::{marker, mem::size_of, slice};
-
-use crate::math::{
-    cyclic_group::IsGroup,
-    elliptic_curve::traits::{FromAffine, IsEllipticCurve},
-};
+use std::marker;
 
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
@@ -241,7 +229,7 @@ pub extern "C" fn verify_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = get_point_from_bytes(&mut commitment_slice) else {
+    let Ok(commitment_g1) = utils::get_point_from_bytes(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -253,12 +241,12 @@ pub extern "C" fn verify_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let Ok(proof_g1) = get_point_from_bytes(&mut proof_slice) else {
+    let Ok(proof_g1) = utils::get_point_from_bytes(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
     // FIXME: We should not use create_src() for this instantiation.
-    let kzg = KZG::new(create_srs());
+    let kzg = KZG::new(utils::create_srs());
     let ret = kzg.verify(&z_fr, &y_fr, &commitment_g1, &proof_g1);
 
     if ret {
@@ -278,7 +266,6 @@ pub extern "C" fn verify_blob_kzg_proof(
     proof_bytes: *const Bytes48,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
-
     unsafe {
         *ok = false;
     }
@@ -286,15 +273,14 @@ pub extern "C" fn verify_blob_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = get_point_from_bytes(&mut commitment_slice) else {
+    let Ok(commitment_g1) = utils::get_point_from_bytes(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
-    let Ok(proof_g1) = get_point_from_bytes(&mut proof_slice) else {
+    let Ok(proof_g1) = utils::get_point_from_bytes(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
     // TODO!!! blob
-
 
     todo!()
 }
@@ -309,106 +295,6 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
     s: *const KZGSettings,
 ) -> C_KZG_RET {
     todo!()
-}
-
-#[allow(dead_code)]
-fn blob_to_polynomial(
-    blob: *const Blob,
-) -> Result<Polynomial<FrElement>, crate::math::errors::ByteConversionError>
-where
-    FrElement: ByteConversion,
-{
-    let input_blob = unsafe { *blob };
-    let mut coefficients = Vec::new();
-
-    for elem_bytes in input_blob.chunks(BYTES_PER_FIELD_ELEMENT) {
-        let f = FrElement::from_bytes_le(elem_bytes)?;
-        coefficients.push(f);
-    }
-
-    Ok(Polynomial::new(&coefficients))
-}
-
-fn get_point_from_bytes(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteConversionError> {
-    let first_byte = input_bytes.first().unwrap();
-
-    // We get the first 3 bits t
-    let prefix_bits = first_byte >> 5;
-
-    // let _first_bit = prefix_bits & 4_u8;
-    let second_bit = prefix_bits & 2_u8;
-    let third_bit = prefix_bits & 1_u8;
-
-    if second_bit == 1 {
-        return Ok(G1Point::neutral_element());
-    }
-    let first_byte_without_contorl_bits = (first_byte << 3) >> 3;
-    input_bytes[0] = first_byte_without_contorl_bits;
-
-    let x = BLS12381FieldElement::from_bytes_be(input_bytes)?;
-
-    // We apply the elliptic curve formula to know the y^2 value.
-    let y_squared = x.pow(3_u16) + BLS12381FieldElement::from(4);
-    let y = sqrt_fr(&y_squared);
-
-    let point = G1Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)?;
-
-    if utils::check_point_is_in_subgroup(&point) {
-        Ok(point)
-    } else {
-        Err(ByteConversionError::PointNotInSubgroup)
-    }
-
-    // * sacar los 3 bits mas significativos y guardarlos
-    // el segundo indica si es el punto en el infinito
-    // el terceer bit más significativo sirve para la raiz cuadrada
-    // armo el field element from bytes big endian -> x
-
-    // con x, hago la raíz cuadrada de (x^3 + 4)
-    // tengo 2 raíces cuadradas, el 3er bit mas significativo,
-    // me dice cuál obtener
-
-    // creo el punto nuevo con el método g1_point = new_affine(x, y);
-
-    // DONE!!!
-    // chequear que el punto esté en el subgrupo:
-    // se lo hace multiplicando el punto por el valor del módulo
-    // si da el punto en el infinito, pertenece al subgrupo
-    //
-
-    // sacar los 3 bits
-    // let a = BLS12381FieldElement::from_bytes_be(&input_bytes);
-}
-
-fn sqrt_fr(field: &BLS12381FieldElement) -> BLS12381FieldElement {
-    field.inv().pow(2_u32)
-}
-
-/// Helper function to create SRS. Once the deserialization of
-/// the SRS is done, this function should be removed.
-fn create_srs() -> StructuredReferenceString<
-    <BLS12381AtePairing as IsPairing>::G1Point,
-    <BLS12381AtePairing as IsPairing>::G2Point,
-> {
-    let mut rng = rand::thread_rng();
-    let toxic_waste = FrElement::new(U256 {
-        limbs: [
-            rng.gen::<u64>(),
-            rng.gen::<u64>(),
-            rng.gen::<u64>(),
-            rng.gen::<u64>(),
-        ],
-    });
-    let g1 = BLS12381Curve::generator();
-    let g2 = BLS12381TwistCurve::generator();
-    let powers_main_group: Vec<G1> = (0..100)
-        .map(|exponent| g1.operate_with_self(toxic_waste.pow(exponent as u128).representative()))
-        .collect();
-    let powers_secondary_group = [
-        g2.clone(),
-        g2.operate_with_self(toxic_waste.representative()),
-    ];
-    StructuredReferenceString::new(&powers_main_group, &powers_secondary_group)
 }
 
 #[cfg(test)]
