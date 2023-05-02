@@ -16,6 +16,7 @@ use crate::math::{
 use crate::G1Point;
 use crate::{BLS12381FieldElement, BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT};
 use rand::Rng;
+use std::cmp::Ordering;
 use std::ops::Neg;
 
 const MODULUS: U256 =
@@ -56,35 +57,44 @@ pub fn decompress_g1_point(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteCo
         return Err(ByteConversionError::InvalidValue);
     }
     let second_bit = prefix_bits & 2_u8;
-    let third_bit = prefix_bits & 1_u8;
-
     // If the second bit is 1, then the compressed point is the
     // point at infinity and we return it directly.
     if second_bit == 1 {
         return Ok(G1Point::neutral_element());
     }
     let first_byte_without_contorl_bits = (first_byte << 3) >> 3;
+
+    let third_bit = prefix_bits & 1_u8;
+
     input_bytes[0] = first_byte_without_contorl_bits;
 
     let x = BLS12381FieldElement::from_bytes_be(input_bytes)?;
 
     // We apply the elliptic curve formula to know the y^2 value.
     let y_squared = x.pow(3_u16) + BLS12381FieldElement::from(4);
-    let y_abs = sqrt_fr(&y_squared);
 
-    let y = if third_bit == 0 { y_abs } else { -y_abs };
+    let (y_sqrt_1, y_sqrt_2) = &y_squared.sqrt().ok_or(ByteConversionError::InvalidValue)?;
 
-    let point = G1Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)?;
+    // we call "negative" to the greate root,
+    // if the third bit is 1, we take this grater value.
+    // Otherwise, we take the second one.
+    let y = match (
+        y_sqrt_1.representative().cmp(&y_sqrt_2.representative()),
+        third_bit,
+    ) {
+        (Ordering::Greater, 0) => y_sqrt_2,
+        (Ordering::Greater, _) => y_sqrt_1,
+        (Ordering::Less, 0) => y_sqrt_1,
+        (Ordering::Less, _) => y_sqrt_2,
+        (Ordering::Equal, _) => y_sqrt_1,
+    };
 
-    if check_point_is_in_subgroup(&point) {
-        Ok(point)
-    } else {
-        Err(ByteConversionError::PointNotInSubgroup)
-    }
-}
+    let point =
+        G1Point::from_affine(x, y.clone()).map_err(|_| ByteConversionError::InvalidValue)?;
 
-pub fn sqrt_fr(field: &BLS12381FieldElement) -> BLS12381FieldElement {
-    field.inv().pow(2_u32)
+    check_point_is_in_subgroup(&point)
+        .then_some(point)
+        .ok_or(ByteConversionError::PointNotInSubgroup)
 }
 
 pub fn compress_g1_point(point: &G1Point) -> Result<Vec<u8>, ByteConversionError> {
