@@ -550,8 +550,8 @@ impl<const NUM_LIMBS: usize> ByteConversion for UnsignedInteger<NUM_LIMBS> {
 
 #[cfg(test)]
 mod tests_u384 {
-    use crate::traits::ByteConversion;
-    use crate::unsigned_integer::element::{UnsignedInteger, U384};
+    use crate::math::traits::ByteConversion;
+    use crate::math::unsigned_integer::element::{UnsignedInteger, U384};
 
     #[test]
     fn construct_new_integer_from_limbs() {
@@ -1296,8 +1296,8 @@ mod tests_u384 {
 
 #[cfg(test)]
 mod tests_u256 {
-    use crate::traits::ByteConversion;
-    use crate::unsigned_integer::element::{UnsignedInteger, U256};
+    use crate::math::traits::ByteConversion;
+    use crate::math::unsigned_integer::element::{UnsignedInteger, U256};
 
     #[test]
     fn construct_new_integer_from_limbs() {
