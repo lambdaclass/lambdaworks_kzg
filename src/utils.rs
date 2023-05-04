@@ -211,10 +211,6 @@ mod tests {
         let g = BLS12381Curve::generator();
         // calculate g point operate with itself
         let g_2 = g.operate_with_self(UnsignedInteger::<4>::from("2"));
-
-        let x = g_2.x();
-        let y = g_2.y();
-
         let compressed_g2 = compress_g1_point(&g_2);
         let mut compressed_g2_slice: [u8; 48] = compressed_g2.try_into().unwrap();
 
