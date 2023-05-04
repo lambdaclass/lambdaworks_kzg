@@ -2,9 +2,12 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 pub mod commitments;
+pub mod compress;
 pub mod math;
 pub mod utils;
 
+use crate::compress::{compress_g1_point, decompress_g1_point};
+use crate::math::unsigned_integer::element::U256;
 use commitments::{
     kzg::{FrElement, FrField, KateZaveruchaGoldberg},
     traits::IsCommitmentScheme,
@@ -22,13 +25,12 @@ use math::{
 };
 use std::marker;
 
-use crate::utils::compress_g1_point;
-
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
 pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
-
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
+pub const MODULUS: U256 =
+    U256::from("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -219,11 +221,15 @@ pub extern "C" fn compute_kzg_proof(
     let kzg = KZG::new(utils::create_srs());
     let proof = kzg.open(&fr_z, &fr_y, &poly);
     let Ok(compressed_proof): Result<[u8; 48], _> = compress_g1_point(&proof).try_into() else {
-        return C_KZG_RET::C_KZG_ERROR; 
+        return C_KZG_RET::C_KZG_ERROR;
     };
 
     unsafe {
-        std::ptr::copy(compressed_proof.as_ptr(), proof_out as *mut u8, BYTES_PER_PROOF);
+        std::ptr::copy(
+            compressed_proof.as_ptr(),
+            proof_out as *mut u8,
+            BYTES_PER_PROOF,
+        );
     }
 
     C_KZG_RET::C_KZG_OK
@@ -257,7 +263,7 @@ pub extern "C" fn verify_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = utils::decompress_g1_point(&mut commitment_slice) else {
+    let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -269,7 +275,7 @@ pub extern "C" fn verify_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let Ok(proof_g1) = utils::decompress_g1_point(&mut proof_slice) else {
+    let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -301,10 +307,10 @@ pub extern "C" fn verify_blob_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = utils::decompress_g1_point(&mut commitment_slice) else {
+    let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
-    let Ok(proof_g1) = utils::decompress_g1_point(&mut proof_slice) else {
+    let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
