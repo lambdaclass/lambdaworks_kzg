@@ -47,25 +47,22 @@ where
 
 pub fn decompress_g1_point(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteConversionError> {
     let first_byte = input_bytes.first().unwrap();
-
     // We get the first 3 bits
     let prefix_bits = first_byte >> 5;
-
-    let first_bit = prefix_bits & 4_u8;
+    let first_bit = (prefix_bits & 4_u8) >> 2;
     // If first bit is not 1, then the value is not compressed.
     if first_bit != 1 {
-        return Err(ByteConversionError::InvalidValue);
+        return Err(ByteConversionError::ValueNotCompressed);
     }
-    let second_bit = prefix_bits & 2_u8;
+    let second_bit = (prefix_bits & 2_u8) >> 1;
     // If the second bit is 1, then the compressed point is the
     // point at infinity and we return it directly.
     if second_bit == 1 {
         return Ok(G1Point::neutral_element());
     }
-    let first_byte_without_contorl_bits = (first_byte << 3) >> 3;
-
     let third_bit = prefix_bits & 1_u8;
 
+    let first_byte_without_contorl_bits = (first_byte << 3) >> 3;
     input_bytes[0] = first_byte_without_contorl_bits;
 
     let x = BLS12381FieldElement::from_bytes_be(input_bytes)?;
