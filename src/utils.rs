@@ -95,8 +95,9 @@ pub fn decompress_g1_point(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteCo
 }
 
 pub fn compress_g1_point(point: &G1Point) -> Result<Vec<u8>, ByteConversionError> {
-    let x = point.x();
-    let y = point.y();
+    let point_affine = point.to_affine();
+    let x = point_affine.x();
+    let y = point_affine.y();
 
     let mut x_bytes = x.to_bytes_be();
 
@@ -149,6 +150,7 @@ mod tests {
     use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::curve::BLS12381Curve;
     use crate::math::elliptic_curve::traits::{FromAffine, IsEllipticCurve};
     use crate::math::traits::ByteConversion;
+    use crate::math::unsigned_integer::element::UnsignedInteger;
     use crate::{BLS12381FieldElement, G1Point};
 
     use super::{compress_g1_point, decompress_g1_point};
@@ -199,5 +201,22 @@ mod tests {
         let decompressed_g = decompress_g1_point(&mut compressed_g_slice).unwrap();
 
         assert_eq!(g, decompressed_g);
+    }
+
+    #[test]
+    fn test_compress_decompress_2g() {
+        let g = BLS12381Curve::generator();
+        // calculate g point operate with itself
+        let g_2 = g.operate_with_self(UnsignedInteger::<4>::from("2"));
+
+        let x = g_2.x();
+        let y = g_2.y();
+
+        let compressed_g2 = compress_g1_point(&g_2).unwrap();
+        let mut compressed_g2_slice: [u8; 48] = compressed_g2.try_into().unwrap();
+
+        let decompressed_g2 = decompress_g1_point(&mut compressed_g2_slice).unwrap();
+
+        assert_eq!(g_2, decompressed_g2);
     }
 }
