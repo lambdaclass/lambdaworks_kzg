@@ -62,8 +62,8 @@ pub fn decompress_g1_point(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteCo
         .ok_or(ByteConversionError::PointNotInSubgroup)
 }
 
-pub fn compress_g1_point(point: &G1Point) -> Vec<u8> {
-    if *point == G1Point::neutral_element() {
+pub fn compress_g1_point(point: &G1Point) -> Result<[u8; 48], Vec<u8>> {
+    let ret_vec = if *point == G1Point::neutral_element() {
         // point is at infinity
         let mut x_bytes = vec![0_u8; 48];
         x_bytes[0] |= 1 << 7;
@@ -85,7 +85,8 @@ pub fn compress_g1_point(point: &G1Point) -> Vec<u8> {
             x_bytes[0] |= 1 << 5;
         }
         x_bytes
-    }
+    };
+    ret_vec.try_into()
 }
 
 #[cfg(test)]
@@ -115,8 +116,8 @@ mod tests {
     #[test]
     fn test_g1_compress_generator() {
         let g = BLS12381Curve::generator();
-        let mut compressed_g = compress_g1_point(&g);
-        let first_byte = compressed_g.first().unwrap();
+        let mut compressed_g = compress_g1_point(&g).unwrap();
+        let first_byte = compressed_g[0];
 
         let first_byte_without_control_bits = (first_byte << 3) >> 3;
         compressed_g[0] = first_byte_without_control_bits;
@@ -130,19 +131,17 @@ mod tests {
     #[test]
     fn test_g1_compress_point_at_inf() {
         let inf = G1Point::neutral_element();
-        let compressed_inf = compress_g1_point(&inf);
-        let first_byte = compressed_inf.first().unwrap();
+        let compressed_inf = compress_g1_point(&inf).unwrap();
+        let first_byte = compressed_inf[0];
 
-        assert_eq!(*first_byte >> 6, 3_u8);
+        assert_eq!(first_byte >> 6, 3_u8);
     }
 
     #[test]
     fn test_compress_decompress_generator() {
         let g = BLS12381Curve::generator();
-        let compressed_g = compress_g1_point(&g);
-        let mut compressed_g_slice: [u8; 48] = compressed_g.try_into().unwrap();
-
-        let decompressed_g = decompress_g1_point(&mut compressed_g_slice).unwrap();
+        let mut compressed_g = compress_g1_point(&g).unwrap();
+        let decompressed_g = decompress_g1_point(&mut compressed_g).unwrap();
 
         assert_eq!(g, decompressed_g);
     }
@@ -152,10 +151,8 @@ mod tests {
         let g = BLS12381Curve::generator();
         // calculate g point operate with itself
         let g_2 = g.operate_with_self(UnsignedInteger::<4>::from("2"));
-        let compressed_g2 = compress_g1_point(&g_2);
-        let mut compressed_g2_slice: [u8; 48] = compressed_g2.try_into().unwrap();
-
-        let decompressed_g2 = decompress_g1_point(&mut compressed_g2_slice).unwrap();
+        let mut compressed_g2 = compress_g1_point(&g_2).unwrap();
+        let decompressed_g2 = decompress_g1_point(&mut compressed_g2).unwrap();
 
         assert_eq!(g_2, decompressed_g2);
     }

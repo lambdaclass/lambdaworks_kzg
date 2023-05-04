@@ -220,7 +220,7 @@ pub extern "C" fn compute_kzg_proof(
     // FIXME: We should not use create_src() for this instantiation.
     let kzg = KZG::new(utils::create_srs());
     let proof = kzg.open(&fr_z, &fr_y, &poly);
-    let Ok(compressed_proof): Result<[u8; 48], _> = compress_g1_point(&proof).try_into() else {
+    let Ok(compressed_proof) = compress_g1_point(&proof) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
