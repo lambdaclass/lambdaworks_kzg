@@ -15,4 +15,4 @@ criterion = "0.4"
 const-random = "0.1.15"
 
 [lib]
-crate-type =["cdylib"]
+crate-type =["cdylib", "staticlib"]
