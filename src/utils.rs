@@ -94,27 +94,30 @@ pub fn decompress_g1_point(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteCo
         .ok_or(ByteConversionError::PointNotInSubgroup)
 }
 
-pub fn compress_g1_point(point: &G1Point) -> Result<Vec<u8>, ByteConversionError> {
-    let point_affine = point.to_affine();
-    let x = point_affine.x();
-    let y = point_affine.y();
-
-    let mut x_bytes = x.to_bytes_be();
-
-    // Set first bit to to 1 indicate this is compressed element.
-    x_bytes[0] |= 1 << 7;
-
-    // Check that it is the point at infinity, if it is return
+pub fn compress_g1_point(point: &G1Point) -> Vec<u8> {
     if *point == G1Point::neutral_element() {
+        // point is at infinity
+        let mut x_bytes = vec![0_u8; 48];
+        x_bytes[0] |= 1 << 7;
         x_bytes[0] |= 1 << 6;
-        return Ok(x_bytes);
-    };
+        x_bytes
+    } else {
+        // point is not at infinity
+        let point_affine = point.to_affine();
+        let x = point_affine.x();
+        let y = point_affine.y();
 
-    let y_neg = y.neg();
-    if y_neg.representative() < y.representative() {
-        x_bytes[0] |= 1 << 5;
+        let mut x_bytes = x.to_bytes_be();
+
+        // Set first bit to to 1 indicate this is compressed element.
+        x_bytes[0] |= 1 << 7;
+
+        let y_neg = y.neg();
+        if y_neg.representative() < y.representative() {
+            x_bytes[0] |= 1 << 5;
+        }
+        x_bytes
     }
-    Ok(x_bytes)
 }
 
 /// Helper function to create SRS. Once the deserialization of
@@ -171,7 +174,7 @@ mod tests {
     #[test]
     fn test_g1_compress_generator() {
         let g = BLS12381Curve::generator();
-        let mut compressed_g = compress_g1_point(&g).unwrap();
+        let mut compressed_g = compress_g1_point(&g);
         let first_byte = compressed_g.first().unwrap();
 
         let first_byte_without_control_bits = (first_byte << 3) >> 3;
@@ -186,7 +189,7 @@ mod tests {
     #[test]
     fn test_g1_compress_point_at_inf() {
         let inf = G1Point::neutral_element();
-        let compressed_inf = compress_g1_point(&inf).unwrap();
+        let compressed_inf = compress_g1_point(&inf);
         let first_byte = compressed_inf.first().unwrap();
 
         assert_eq!(*first_byte >> 6, 3_u8);
@@ -195,7 +198,7 @@ mod tests {
     #[test]
     fn test_compress_decompress_generator() {
         let g = BLS12381Curve::generator();
-        let compressed_g = compress_g1_point(&g).unwrap();
+        let compressed_g = compress_g1_point(&g);
         let mut compressed_g_slice: [u8; 48] = compressed_g.try_into().unwrap();
 
         let decompressed_g = decompress_g1_point(&mut compressed_g_slice).unwrap();
@@ -212,7 +215,7 @@ mod tests {
         let x = g_2.x();
         let y = g_2.y();
 
-        let compressed_g2 = compress_g1_point(&g_2).unwrap();
+        let compressed_g2 = compress_g1_point(&g_2);
         let mut compressed_g2_slice: [u8; 48] = compressed_g2.try_into().unwrap();
 
         let decompressed_g2 = decompress_g1_point(&mut compressed_g2_slice).unwrap();
