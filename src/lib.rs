@@ -351,3 +351,33 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
 ) -> C_KZG_RET {
     todo!()
 }
+
+/*
+#[cfg(test)]
+mod tests {
+    use crate::{compute_kzg_proof, Blob, Bytes32, KZGProof, KZGSettings};
+
+    #[test]
+    fn test_compute_kzg_proof() {
+        // Test this case:
+        // polinomial: 1 cte
+        // evaluation fr: 1
+        // Expected result:
+        // proof: inf
+        // y_out: 1
+
+        let mut proof_out: KZGProof = [0; 48];
+        let mut y_out: Bytes32 = [0; 32];
+
+        let ret = compute_kzg_proof(
+            *mut proof_out,
+            *mut y_out,
+            blob: *const Blob,
+            z_bytes: *const Bytes32,
+            s: *const KZGSettings,
+        );
+
+        println!("Hola mundo");
+    }
+}
+*/
