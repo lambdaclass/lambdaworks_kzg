@@ -363,18 +363,17 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
 
 #[cfg(test)]
 mod tests {
-    use crate::commitments::traits::IsCommitmentScheme;
-    use crate::compress::{compress_g1_point, decompress_g1_point};
+    use crate::compress::decompress_g1_point;
     use crate::math::cyclic_group::IsGroup;
-    use crate::utils::{self, polynomial_to_blob_with_size};
+    use crate::utils::polynomial_to_blob_with_size;
+    use crate::G1Point;
     use crate::{
         blst_fr, blst_p1, blst_p2,
         commitments::kzg::FrElement,
         compute_kzg_proof, fr_t,
         math::{field::element::FieldElement, polynomial::Polynomial, traits::ByteConversion},
-        verify_kzg_proof, Blob, Bytes32, FFTSettings, KZGProof, KZGSettings, C_KZG_RET, FE,
+        Blob, Bytes32, FFTSettings, KZGProof, KZGSettings, C_KZG_RET, FE,
     };
-    use crate::{Bytes48, G1Point};
 
     #[test]
     fn test_compute_kzg_proof() {
