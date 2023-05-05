@@ -215,7 +215,13 @@ pub extern "C" fn compute_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let fr_y = polynomial.evaluate(&fr_z);
+    let fr_y: FieldElement<
+        math::field::fields::montgomery_backed_prime_fields::MontgomeryBackendPrimeField<
+            commitments::kzg::FrConfig,
+            4,
+        >,
+    > = polynomial.evaluate(&fr_z);
+    let y_out_slice: [u8; 32] = fr_y.to_bytes_be().try_into().unwrap();
 
     // FIXME: We should not use create_src() for this instantiation.
     let kzg = KZG::new(utils::create_srs());
@@ -230,6 +236,7 @@ pub extern "C" fn compute_kzg_proof(
             proof_out as *mut u8,
             BYTES_PER_PROOF,
         );
+        std::ptr::copy(y_out_slice.as_ptr(), y_out as *mut u8, 32);
     }
 
     C_KZG_RET::C_KZG_OK
