@@ -194,6 +194,20 @@ pub extern "C" fn blob_to_kzg_commitment(
     todo!()
 }
 
+///
+/// Compute KZG proof for polynomial in Lagrange form at position z.
+///
+/// # Params
+///
+/// `proof_out` - The combined proof as a single G1 element
+/// `y_out` - The evaluation of the polynomial at the evaluation point z
+/// `blob` - The blob (polynomial) to generate a proof for
+/// `z` - The generator z-value for the evaluation points
+/// `s` - The trusted setup
+///
+/// # Return
+///
+/// Value of type `C_KZG_RET` indicating error status.
 #[no_mangle]
 pub extern "C" fn compute_kzg_proof(
     proof_out: *mut KZGProof,
