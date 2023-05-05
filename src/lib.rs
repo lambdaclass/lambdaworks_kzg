@@ -207,7 +207,7 @@ pub extern "C" fn compute_kzg_proof(
     let input_blob: [u8; BYTES_PER_BLOB] =
         unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
 
-    let Ok(poly) = utils::blob_to_polynomial(&input_blob) else {
+    let Ok(polynomial) = utils::blob_to_polynomial(&input_blob) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -215,11 +215,11 @@ pub extern "C" fn compute_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let fr_y = poly.evaluate(&fr_z);
+    let fr_y = polynomial.evaluate(&fr_z);
 
     // FIXME: We should not use create_src() for this instantiation.
     let kzg = KZG::new(utils::create_srs());
-    let proof = kzg.open(&fr_z, &fr_y, &poly);
+    let proof = kzg.open(&fr_z, &fr_y, &polynomial);
     let Ok(compressed_proof) = compress_g1_point(&proof) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
