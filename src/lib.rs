@@ -32,7 +32,7 @@ pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
 pub const MODULUS: U256 =
     U256::from("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub enum C_KZG_RET {
@@ -363,13 +363,16 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
 
 #[cfg(test)]
 mod tests {
+    use crate::compress::decompress_g1_point;
+    use crate::math::cyclic_group::IsGroup;
     use crate::utils::polynomial_to_blob_with_size;
-    use crate::{blst_fr, blst_p1, blst_p2, fr_t};
+    use crate::G1Point;
     use crate::{
+        blst_fr, blst_p1, blst_p2,
         commitments::kzg::FrElement,
-        compute_kzg_proof,
+        compute_kzg_proof, fr_t,
         math::{field::element::FieldElement, polynomial::Polynomial, traits::ByteConversion},
-        Blob, Bytes32, FFTSettings, KZGProof, KZGSettings, FE,
+        Blob, Bytes32, FFTSettings, KZGProof, KZGSettings, C_KZG_RET, FE,
     };
 
     #[test]
@@ -423,6 +426,18 @@ mod tests {
             &s as *const KZGSettings,
         );
 
-        println!("ret: {:?}", ret);
+        // assert ret function
+        let ok = C_KZG_RET::C_KZG_OK;
+        assert_eq!(ret, ok);
+
+        // y evaluation is one
+        let one_fr = FE::one();
+        let y_out_fr = FE::from_bytes_be(&mut y_out).unwrap();
+        assert_eq!(one_fr, y_out_fr);
+
+        // proof is inf
+        let p = decompress_g1_point(&mut proof_out).unwrap();
+        let inf = G1Point::neutral_element();
+        assert_eq!(p, inf);
     }
 }
