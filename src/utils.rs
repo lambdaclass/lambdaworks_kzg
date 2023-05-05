@@ -15,7 +15,6 @@ use crate::math::{
 use crate::{BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT};
 use rand::Rng;
 
-#[allow(dead_code)]
 pub fn blob_to_polynomial(
     input_blob: &[u8; BYTES_PER_BLOB],
 ) -> Result<Polynomial<FrElement>, crate::math::errors::ByteConversionError>
