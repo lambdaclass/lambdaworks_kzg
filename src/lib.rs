@@ -363,17 +363,18 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
 
 #[cfg(test)]
 mod tests {
-    use crate::compress::decompress_g1_point;
+    use crate::commitments::traits::IsCommitmentScheme;
+    use crate::compress::{compress_g1_point, decompress_g1_point};
     use crate::math::cyclic_group::IsGroup;
-    use crate::utils::polynomial_to_blob_with_size;
-    use crate::G1Point;
+    use crate::utils::{self, polynomial_to_blob_with_size};
     use crate::{
         blst_fr, blst_p1, blst_p2,
         commitments::kzg::FrElement,
         compute_kzg_proof, fr_t,
         math::{field::element::FieldElement, polynomial::Polynomial, traits::ByteConversion},
-        Blob, Bytes32, FFTSettings, KZGProof, KZGSettings, C_KZG_RET, FE,
+        verify_kzg_proof, Blob, Bytes32, FFTSettings, KZGProof, KZGSettings, C_KZG_RET, FE,
     };
+    use crate::{Bytes48, G1Point};
 
     #[test]
     fn test_compute_kzg_proof() {
@@ -427,8 +428,8 @@ mod tests {
         );
 
         // assert ret function
-        let ok = C_KZG_RET::C_KZG_OK;
-        assert_eq!(ret, ok);
+        let ok_enum_kzg = C_KZG_RET::C_KZG_OK;
+        assert_eq!(ret, ok_enum_kzg);
 
         // y evaluation is one
         let one_fr = FE::one();
@@ -439,5 +440,23 @@ mod tests {
         let p = decompress_g1_point(&mut proof_out).unwrap();
         let inf = G1Point::neutral_element();
         assert_eq!(p, inf);
+
+        /* TODO: uncomment this when KZG verify accept inf point
+        let kzg = crate::KZG::new(utils::create_srs());
+        let commitment = kzg.commit(&polynomial);
+        let commitment_bytes = compress_g1_point(&commitment).unwrap();
+
+        let mut ok = false;
+        let ret_verify = verify_kzg_proof(
+            &mut ok as *mut bool,
+            &commitment_bytes as *const Bytes48,
+            &z_bytes as *const Bytes32,
+            &y_out as *const Bytes32,
+            &proof_out as *const Bytes48,
+            &s as *const KZGSettings,
+        );
+
+        assert_eq!(ret_verify, ok_enum_kzg);
+        */
     }
 }
