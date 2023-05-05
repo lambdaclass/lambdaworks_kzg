@@ -432,7 +432,7 @@ mod tests {
 
         // y evaluation is one
         let one_fr = FE::one();
-        let y_out_fr = FE::from_bytes_be(&mut y_out).unwrap();
+        let y_out_fr = FE::from_bytes_be(&y_out).unwrap();
         assert_eq!(one_fr, y_out_fr);
 
         // proof is inf
