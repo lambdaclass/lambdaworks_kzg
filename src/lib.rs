@@ -2,9 +2,12 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 pub mod commitments;
+pub mod compress;
 pub mod math;
 pub mod utils;
 
+use crate::compress::{compress_g1_point, decompress_g1_point};
+use crate::math::unsigned_integer::element::U256;
 use commitments::{
     kzg::{FrElement, FrField, KateZaveruchaGoldberg},
     traits::IsCommitmentScheme,
@@ -25,9 +28,11 @@ use std::marker;
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
 pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
-
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
+pub const MODULUS: U256 =
+    U256::from("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
 
+#[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub enum C_KZG_RET {
@@ -64,18 +69,21 @@ pub type Blob = [u8; BYTES_PER_BLOB];
 #[allow(non_camel_case_types)]
 pub type limb_t = u64;
 
+#[derive(Default)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_fr {
     l: [limb_t; 256 / 8 / core::mem::size_of::<limb_t>()],
 }
 
+#[derive(Default)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_fp {
     l: [limb_t; 384 / 8 / core::mem::size_of::<limb_t>()],
 }
 
+#[derive(Default)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_p1 {
@@ -84,6 +92,7 @@ pub struct blst_p1 {
     pub z: blst_fp,
 }
 
+#[derive(Default)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_p1_affine {
@@ -92,6 +101,7 @@ pub struct blst_p1_affine {
 }
 
 /* 0 is "real" part, 1 is "imaginary" */
+#[derive(Default)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_fp2 {
@@ -108,6 +118,7 @@ pub type g2_t = blst_p2;
 pub type fr_t = blst_fr;
 /**< Internal Fr field element type. */
 
+#[derive(Default)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_p2 {
@@ -122,6 +133,13 @@ pub struct blst_p2_affine {
     pub x: blst_fp2,
     pub y: blst_fp2,
 }
+
+type FE = FieldElement<
+    math::field::fields::montgomery_backed_prime_fields::MontgomeryBackendPrimeField<
+        commitments::kzg::FrConfig,
+        4,
+    >,
+>;
 
 //typedef struct { limb_t l[256/8/sizeof(limb_t)]; } blst_fr;
 //typedef struct { limb_t l[384/8/sizeof(limb_t)]; } blst_fp;
@@ -190,6 +208,20 @@ pub extern "C" fn blob_to_kzg_commitment(
     todo!()
 }
 
+///
+/// Compute KZG proof for polynomial in Lagrange form at position z.
+///
+/// # Params
+///
+/// `proof_out` - The combined proof as a single G1 element
+/// `y_out` - The evaluation of the polynomial at the evaluation point z
+/// `blob` - The blob (polynomial) to generate a proof for
+/// `z` - The generator z-value for the evaluation points
+/// `s` - The trusted setup
+///
+/// # Return
+///
+/// Value of type `C_KZG_RET` indicating error status.
 #[no_mangle]
 pub extern "C" fn compute_kzg_proof(
     proof_out: *mut KZGProof,
@@ -198,7 +230,39 @@ pub extern "C" fn compute_kzg_proof(
     z_bytes: *const Bytes32,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
-    todo!()
+    let z_slice = unsafe { *z_bytes };
+    let s_struct = unsafe { (*s).clone() };
+    let input_blob: [u8; BYTES_PER_BLOB] =
+        unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
+
+    let Ok(polynomial) = utils::blob_to_polynomial(&input_blob) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let Ok(fr_z) = FrElement::from_bytes_be(&z_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let fr_y: FE = polynomial.evaluate(&fr_z);
+    let y_out_slice: [u8; 32] = fr_y.to_bytes_be().try_into().unwrap();
+
+    // FIXME: We should not use create_src() for this instantiation.
+    let kzg = KZG::new(utils::create_srs());
+    let proof = kzg.open(&fr_z, &fr_y, &polynomial);
+    let Ok(compressed_proof) = compress_g1_point(&proof) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    unsafe {
+        std::ptr::copy(
+            compressed_proof.as_ptr(),
+            proof_out as *mut u8,
+            BYTES_PER_PROOF,
+        );
+        std::ptr::copy(y_out_slice.as_ptr(), y_out as *mut u8, 32);
+    }
+
+    C_KZG_RET::C_KZG_OK
 }
 
 #[no_mangle]
@@ -229,7 +293,7 @@ pub extern "C" fn verify_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = utils::get_point_from_bytes(&mut commitment_slice) else {
+    let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -241,7 +305,7 @@ pub extern "C" fn verify_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let Ok(proof_g1) = utils::get_point_from_bytes(&mut proof_slice) else {
+    let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -273,10 +337,10 @@ pub extern "C" fn verify_blob_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = utils::get_point_from_bytes(&mut commitment_slice) else {
+    let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
-    let Ok(proof_g1) = utils::get_point_from_bytes(&mut proof_slice) else {
+    let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -295,4 +359,103 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
     s: *const KZGSettings,
 ) -> C_KZG_RET {
     todo!()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::compress::decompress_g1_point;
+    use crate::math::cyclic_group::IsGroup;
+    use crate::utils::polynomial_to_blob_with_size;
+    use crate::G1Point;
+    use crate::{
+        blst_fr, blst_p1, blst_p2,
+        commitments::kzg::FrElement,
+        compute_kzg_proof, fr_t,
+        math::{field::element::FieldElement, polynomial::Polynomial, traits::ByteConversion},
+        Blob, Bytes32, FFTSettings, KZGProof, KZGSettings, C_KZG_RET, FE,
+    };
+
+    #[test]
+    fn test_compute_kzg_proof() {
+        // Test this case:
+        // polinomial: 1 cte
+        // evaluation fr: 1
+        // Expected result:
+        // proof: inf
+        // y_out: 1
+
+        // output buffers
+        let mut proof_out: KZGProof = [0; 48];
+        let mut y_out: Bytes32 = [0; 32];
+
+        // assign poly 1
+        let polynomial = Polynomial::<FrElement>::new(&[FieldElement::one()]);
+        let blob = polynomial_to_blob_with_size(&polynomial).unwrap();
+        // z = 1
+        let z_bytes: Bytes32 = FE::from(1).to_bytes_be().try_into().unwrap();
+
+        let mut zero_fr_expanded_roots_of_unity = blst_fr::default();
+        let mut zero_fr_reverse_roots_of_unity = blst_fr::default();
+        let mut zero_fr_roots_of_unity = blst_fr::default();
+
+        let mut fft_settings = FFTSettings {
+            max_width: 8,
+            expanded_roots_of_unity: &mut zero_fr_expanded_roots_of_unity as *mut fr_t,
+            reverse_roots_of_unity: &mut zero_fr_reverse_roots_of_unity as *mut fr_t,
+            roots_of_unity: &mut zero_fr_roots_of_unity as *mut fr_t,
+            _marker: std::marker::PhantomData,
+        };
+
+        let mut zer_fr_g1_values = blst_p1::default();
+        let mut zer_fr_g2_values = blst_p2::default();
+
+        let s = KZGSettings {
+            fs: &mut fft_settings as *mut FFTSettings,
+            g1_values: &mut zer_fr_g1_values as *mut blst_p1,
+            g2_values: &mut zer_fr_g2_values as *mut blst_p2,
+            _marker: std::marker::PhantomData,
+            _marker2: std::marker::PhantomData,
+            _marker3: std::marker::PhantomData,
+        };
+
+        let ret = compute_kzg_proof(
+            &mut proof_out as *mut KZGProof,
+            &mut y_out as *mut Bytes32,
+            &blob as *const Blob,
+            &z_bytes as *const Bytes32,
+            &s as *const KZGSettings,
+        );
+
+        // assert ret function
+        let ok_enum_kzg = C_KZG_RET::C_KZG_OK;
+        assert_eq!(ret, ok_enum_kzg);
+
+        // y evaluation is one
+        let one_fr = FE::one();
+        let y_out_fr = FE::from_bytes_be(&y_out).unwrap();
+        assert_eq!(one_fr, y_out_fr);
+
+        // proof is inf
+        let p = decompress_g1_point(&mut proof_out).unwrap();
+        let inf = G1Point::neutral_element();
+        assert_eq!(p, inf);
+
+        /* TODO: uncomment this when KZG verify accept inf point
+        let kzg = crate::KZG::new(utils::create_srs());
+        let commitment = kzg.commit(&polynomial);
+        let commitment_bytes = compress_g1_point(&commitment).unwrap();
+
+        let mut ok = false;
+        let ret_verify = verify_kzg_proof(
+            &mut ok as *mut bool,
+            &commitment_bytes as *const Bytes48,
+            &z_bytes as *const Bytes32,
+            &y_out as *const Bytes32,
+            &proof_out as *const Bytes48,
+            &s as *const KZGSettings,
+        );
+
+        assert_eq!(ret_verify, ok_enum_kzg);
+        */
+    }
 }
