@@ -388,6 +388,9 @@ pub extern "C" fn verify_blob_kzg_proof(
     unsafe {
         *ok = false;
     }
+    let input_blob: [u8; BYTES_PER_BLOB] =
+        unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
+
     let mut commitment_slice = unsafe { *commitment_bytes };
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
@@ -399,6 +402,26 @@ pub extern "C" fn verify_blob_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
+    let Ok(evaluation_challenge_fr) = utils::compute_challenge(
+        &input_blob,
+        &commitment_g1,
+    ) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    /*
+
+    // Evaluate challenge to get y
+    ret = evaluate_polynomial_in_evaluation_form(
+        &y_fr, &polynomial, &evaluation_challenge_fr, s
+    );
+    if (ret != C_KZG_OK) return ret;
+
+    // Call helper to do pairings check
+    return verify_kzg_proof_impl(
+        ok, &commitment_g1, &evaluation_challenge_fr, &y_fr, &proof_g1, s
+    );
+    */
     // TODO!!! blob
 
     todo!()
