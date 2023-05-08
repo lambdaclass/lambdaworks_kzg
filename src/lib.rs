@@ -46,6 +46,9 @@ pub enum C_KZG_RET {
     C_KZG_MALLOC,
 }
 
+/** The domain separator for the Fiat-Shamir protocol. */
+pub const FIAT_SHAMIR_PROTOCOL_DOMAIN: [u8; 16] = *b"FSBLOBVERIFY_V1_";
+
 /** The number of bytes in a KZG commitment. */
 pub const BYTES_PER_COMMITMENT: usize = 48;
 
@@ -265,6 +268,20 @@ pub extern "C" fn compute_kzg_proof(
     C_KZG_RET::C_KZG_OK
 }
 
+/// Given a blob and a commitment, return the KZG proof that is used to verify
+/// it against the commitment. This function does not verify that the commitment
+/// is correct with respect to the blob.
+///
+/// # Params
+///
+/// `out` - The resulting proof
+/// `blob` - A blob representing a polynomial
+/// `commitment_bytes` - Commitment to verify
+/// `s` - The trusted setup
+///
+/// # Return
+///
+/// Value of type `C_KZG_RET` indicating error status.
 #[no_mangle]
 pub extern "C" fn compute_blob_kzg_proof(
     out: *mut KZGProof,
@@ -272,7 +289,37 @@ pub extern "C" fn compute_blob_kzg_proof(
     commitment_bytes: *const Bytes48,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
-    todo!()
+    let mut commitment_slice = unsafe { *commitment_bytes };
+    let input_blob: [u8; BYTES_PER_BLOB] =
+        unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
+
+    // Do conversions first to fail fast, compute_challenge is expensive
+    let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+    let Ok(polynomial) = utils::blob_to_polynomial(&input_blob) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    // get the point fr_z (i.e. "x") from fr where evaluate the polynomial
+    // Compute the challenge for the given blob/commitment
+    // compute_challenge(&evaluation_challenge_fr, blob, &commitment_g1);
+    let fr_z = FrElement::one(); // FIXME!
+
+    // insert the values in the string, hash and get the field element
+
+    let fr_y: FE = polynomial.evaluate(&fr_z);
+    let kzg = KZG::new(utils::create_srs());
+    let proof = kzg.open(&fr_z, &fr_y, &polynomial);
+    let Ok(compressed_proof) = compress_g1_point(&proof) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    unsafe {
+        std::ptr::copy(compressed_proof.as_ptr(), out as *mut u8, BYTES_PER_PROOF);
+    }
+
+    C_KZG_RET::C_KZG_OK
 }
 
 #[no_mangle]
