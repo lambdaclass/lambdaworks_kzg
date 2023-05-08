@@ -49,6 +49,9 @@ pub enum C_KZG_RET {
 /** The domain separator for the Fiat-Shamir protocol. */
 pub const FIAT_SHAMIR_PROTOCOL_DOMAIN: [u8; 16] = *b"FSBLOBVERIFY_V1_";
 
+/** Length of the domain strings above. */
+pub const DOMAIN_STR_LENGTH: usize = 16;
+
 /** The number of bytes in a KZG commitment. */
 pub const BYTES_PER_COMMITMENT: usize = 48;
 
@@ -62,6 +65,9 @@ pub const FIELD_ELEMENTS_PER_BLOB: usize = 4096;
 
 /** The number of bytes in a blob. */
 pub const BYTES_PER_BLOB: usize = FIELD_ELEMENTS_PER_BLOB * BYTES_PER_FIELD_ELEMENT;
+
+pub const CHALLENGE_INPUT_SIZE: usize =
+    DOMAIN_STR_LENGTH + 16 + BYTES_PER_BLOB + BYTES_PER_COMMITMENT;
 
 pub type Bytes32 = [u8; 32];
 pub type Bytes48 = [u8; 48];
@@ -303,10 +309,12 @@ pub extern "C" fn compute_blob_kzg_proof(
 
     // get the point fr_z (i.e. "x") from fr where evaluate the polynomial
     // Compute the challenge for the given blob/commitment
-    // compute_challenge(&evaluation_challenge_fr, blob, &commitment_g1);
-    let fr_z = FrElement::one(); // FIXME!
-
-    // insert the values in the string, hash and get the field element
+    let Ok(fr_z) = utils::compute_challenge(
+        &input_blob,
+        &commitment_g1,
+    ) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
 
     let fr_y: FE = polynomial.evaluate(&fr_z);
     let kzg = KZG::new(utils::create_srs());
