@@ -363,10 +363,10 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
 
 #[cfg(test)]
 mod tests {
-    use crate::compress::decompress_g1_point;
+    use crate::commitments::traits::IsCommitmentScheme;
+    use crate::compress::{compress_g1_point, decompress_g1_point};
     use crate::math::cyclic_group::IsGroup;
     use crate::utils::polynomial_to_blob_with_size;
-    use crate::G1Point;
     use crate::{
         blst_fr, blst_p1, blst_p2,
         commitments::kzg::FrElement,
@@ -374,6 +374,7 @@ mod tests {
         math::{field::element::FieldElement, polynomial::Polynomial, traits::ByteConversion},
         Blob, Bytes32, FFTSettings, KZGProof, KZGSettings, C_KZG_RET, FE,
     };
+    use crate::{verify_kzg_proof, Bytes48, G1Point};
 
     #[test]
     fn test_compute_kzg_proof() {
@@ -440,8 +441,7 @@ mod tests {
         let inf = G1Point::neutral_element();
         assert_eq!(p, inf);
 
-        /* TODO: uncomment this when KZG verify accept inf point
-        let kzg = crate::KZG::new(utils::create_srs());
+        let kzg = crate::KZG::new(crate::utils::create_srs());
         let commitment = kzg.commit(&polynomial);
         let commitment_bytes = compress_g1_point(&commitment).unwrap();
 
@@ -456,6 +456,5 @@ mod tests {
         );
 
         assert_eq!(ret_verify, ok_enum_kzg);
-        */
     }
 }
