@@ -130,8 +130,13 @@ pub fn compute_challenge(
         .chain(blob.iter().copied())
         .chain(compress_g1_point(commitment_g1)?.into_iter())
         .collect::<Vec<u8>>();
+    hash_field_unsafe(&input_hash)
+}
 
-    let ret_hash = sha256::digest(&*input_hash);
+/// Hashes the input sting and returns the field element corresponding to
+/// the hash coverted to field
+fn hash_field_unsafe(input_slice: &[u8]) -> Result<FrElement, Vec<u8>> {
+    let ret_hash = sha256::digest(input_slice);
     let mut bytes_hash = [0u8; 32];
     hex::decode_to_slice(&ret_hash, &mut bytes_hash as &mut [u8]).map_err(|_| Vec::new())?;
     // FIXME! This should be changed to a hash to field method
