@@ -1,4 +1,5 @@
 use crate::commitments::kzg::{FrElement, StructuredReferenceString, G1};
+use crate::compress::compress_g1_point;
 use crate::math::cyclic_group::IsGroup;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::errors::ByteConversionError;
@@ -13,7 +14,10 @@ use crate::math::{
     polynomial::Polynomial,
     traits::ByteConversion,
 };
-use crate::{BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT, FE};
+use crate::{
+    G1Point, BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT, FE, FIAT_SHAMIR_PROTOCOL_DOMAIN,
+    FIELD_ELEMENTS_PER_BLOB,
+};
 use rand::Rng;
 
 pub fn blob_to_polynomial(
@@ -94,6 +98,49 @@ pub fn create_srs() -> StructuredReferenceString<
         g2.operate_with_self(toxic_waste.representative()),
     ];
     StructuredReferenceString::new(&powers_main_group, &powers_secondary_group)
+}
+
+/// Return the Fiat-Shamir challenge required to verify `blob` and
+/// `commitment`.
+///
+/// # Params
+///
+/// - `blob` - A blob
+/// - `commitment` - A commitment
+///
+/// # Returns
+///
+/// FrElement corresponding to the field element value.
+pub fn compute_challenge(
+    blob: &[u8; BYTES_PER_BLOB],
+    commitment_g1: &G1Point,
+) -> Result<FrElement, Vec<u8>> {
+    // insert the values in the string, hash and get the field element
+    // concat:
+    // - FIAT_SHAMIR_PROTOCOL_DOMAIN
+    // - FIELD_ELEMENTS_PER_BLOB as litlle-endian number
+    // - 0 as u64
+    // - blob (this is BYTES_PER_BLOB bytes)
+    // - g1 point
+
+    let input_hash = FIAT_SHAMIR_PROTOCOL_DOMAIN
+        .into_iter()
+        .chain(FIELD_ELEMENTS_PER_BLOB.to_le_bytes().into_iter())
+        .chain(0_u64.to_le_bytes().into_iter())
+        .chain(blob.iter().copied())
+        .chain(compress_g1_point(commitment_g1)?.into_iter())
+        .collect::<Vec<u8>>();
+    hash_field_unsafe(&input_hash)
+}
+
+/// Hashes the input sting and returns the field element corresponding to
+/// the hash coverted to field
+fn hash_field_unsafe(input_slice: &[u8]) -> Result<FrElement, Vec<u8>> {
+    let ret_hash = sha256::digest(input_slice);
+    let mut bytes_hash = [0u8; 32];
+    hex::decode_to_slice(&ret_hash, &mut bytes_hash as &mut [u8]).map_err(|_| Vec::new())?;
+    // FIXME! This should be changed to a hash to field method
+    FrElement::from_bytes_be(&bytes_hash).map_err(|_| Vec::new())
 }
 
 #[cfg(test)]
