@@ -12,6 +12,7 @@ use commitments::{
     kzg::{FrElement, FrField, KateZaveruchaGoldberg},
     traits::IsCommitmentScheme,
 };
+use math::polynomial::Polynomial;
 use math::{
     elliptic_curve::short_weierstrass::{
         curves::bls12_381::{
@@ -375,7 +376,115 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
     n: usize,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
-    todo!()
+    unsafe {
+        *ok = false;
+    }
+
+    match n {
+        0 => {
+            unsafe {
+                *ok = false;
+            }
+            C_KZG_RET::C_KZG_OK
+        }
+        1 => verify_blob_kzg_proof(ok, blobs, commitments_bytes, proofs_bytes, s),
+        n => {
+            let mut commitment_arr: Vec<FE>;
+            let commitments_slice_array =
+                unsafe { std::slice::from_raw_parts(commitments_bytes, n) };
+            let mut commitments_g1_vec = Vec::<G1Point>::new();
+
+            // arrays of blobs
+            let blobs_slice_array = unsafe { std::slice::from_raw_parts(blobs, n) };
+            let mut polynomial_vec = Vec::<Polynomial<FrElement>>::new();
+
+            let mut challenges_vec = Vec::<FE>::new();
+            let mut evaluations_vec = Vec::<FE>::new();
+
+            for i in 0..n {
+                // fill the vector of commitments
+                let mut g1_point_compressed = commitments_slice_array[i].clone();
+                let Ok(commitment_g1) = decompress_g1_point(&mut g1_point_compressed) else {
+                    return C_KZG_RET::C_KZG_ERROR;
+                };
+                commitments_g1_vec.push(commitment_g1);
+
+                // convert blobs_slice_array to polynomials
+                let Ok(polynomial) = utils::blob_to_polynomial(&blobs_slice_array[i]) else {
+                    return C_KZG_RET::C_KZG_ERROR;
+                };
+                polynomial_vec.push(polynomial);
+
+                // get list of challenges
+
+                // get list of evaluations
+
+                //ret = verify_kzg_proof_batch(
+                //    ok, commitments_g1, evaluation_challenges_fr, ys_fr, proofs_g1, n, s
+                //);
+            }
+            /*
+            for (size_t i = 0; i < n; i++) {
+                Polynomial polynomial;
+
+                /* Convert each commitment to a g1 point */
+                ret = bytes_to_kzg_commitment(
+                    &commitments_g1[i], &commitments_bytes[i]
+                );
+                if (ret != C_KZG_OK) goto out;
+
+                /* Convert each blob from bytes to a poly */
+                ret = blob_to_polynomial(&polynomial, &blobs[i]);
+                if (ret != C_KZG_OK) goto out;
+
+                compute_challenge(
+                    &evaluation_challenges_fr[i], &blobs[i], &commitments_g1[i]
+                );
+
+                ret = evaluate_polynomial_in_evaluation_form(
+                    &ys_fr[i], &polynomial, &evaluation_challenges_fr[i], s
+                );
+                if (ret != C_KZG_OK) goto out;
+
+                ret = bytes_to_kzg_proof(&proofs_g1[i], &proofs_bytes[i]);
+                if (ret != C_KZG_OK) goto out;
+            }
+
+             */
+            C_KZG_RET::C_KZG_OK
+        }
+    }
+    /*
+        C_KZG_RET ret;
+        g1_t *commitments_g1 = NULL;
+        g1_t *proofs_g1 = NULL;
+        fr_t *evaluation_challenges_fr = NULL;
+        fr_t *ys_fr = NULL;
+
+        /* We will need a bunch of arrays to store our objects... */
+        ret = new_g1_array(&commitments_g1, n);
+        if (ret != C_KZG_OK) goto out;
+        ret = new_g1_array(&proofs_g1, n);
+        if (ret != C_KZG_OK) goto out;
+        ret = new_fr_array(&evaluation_challenges_fr, n);
+        if (ret != C_KZG_OK) goto out;
+        ret = new_fr_array(&ys_fr, n);
+        if (ret != C_KZG_OK) goto out;
+
+
+
+        ret = verify_kzg_proof_batch(
+            ok, commitments_g1, evaluation_challenges_fr, ys_fr, proofs_g1, n, s
+        );
+
+    out:
+        c_kzg_free(commitments_g1);
+        c_kzg_free(proofs_g1);
+        c_kzg_free(evaluation_challenges_fr);
+        c_kzg_free(ys_fr);
+        return ret;
+        */
+    //todo!()
 }
 
 #[cfg(test)]
