@@ -401,6 +401,9 @@ pub extern "C" fn verify_blob_kzg_proof(
     let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
+    let Ok(polynomial) = utils::blob_to_polynomial(&input_blob) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
 
     let Ok(evaluation_challenge_fr) = utils::compute_challenge(
         &input_blob,
@@ -409,22 +412,19 @@ pub extern "C" fn verify_blob_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    /*
+    let y_fr: FE = polynomial.evaluate(&evaluation_challenge_fr);
 
-    // Evaluate challenge to get y
-    ret = evaluate_polynomial_in_evaluation_form(
-        &y_fr, &polynomial, &evaluation_challenge_fr, s
-    );
-    if (ret != C_KZG_OK) return ret;
+    // FIXME: We should not use create_src() for this instantiation.
+    let kzg = KZG::new(utils::create_srs());
+    let ret = kzg.verify(&evaluation_challenge_fr, &y_fr, &commitment_g1, &proof_g1);
 
-    // Call helper to do pairings check
-    return verify_kzg_proof_impl(
-        ok, &commitment_g1, &evaluation_challenge_fr, &y_fr, &proof_g1, s
-    );
-    */
-    // TODO!!! blob
+    if ret {
+        unsafe {
+            *ok = true;
+        }
+    }
 
-    todo!()
+    C_KZG_RET::C_KZG_OK
 }
 
 #[no_mangle]
