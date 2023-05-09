@@ -46,6 +46,12 @@ pub enum C_KZG_RET {
     C_KZG_MALLOC,
 }
 
+/** The domain separator for the Fiat-Shamir protocol. */
+pub const FIAT_SHAMIR_PROTOCOL_DOMAIN: [u8; 16] = *b"FSBLOBVERIFY_V1_";
+
+/** Length of the domain strings above. */
+pub const DOMAIN_STR_LENGTH: usize = 16;
+
 /** The number of bytes in a KZG commitment. */
 pub const BYTES_PER_COMMITMENT: usize = 48;
 
@@ -59,6 +65,9 @@ pub const FIELD_ELEMENTS_PER_BLOB: usize = 4096;
 
 /** The number of bytes in a blob. */
 pub const BYTES_PER_BLOB: usize = FIELD_ELEMENTS_PER_BLOB * BYTES_PER_FIELD_ELEMENT;
+
+pub const CHALLENGE_INPUT_SIZE: usize =
+    DOMAIN_STR_LENGTH + 16 + BYTES_PER_BLOB + BYTES_PER_COMMITMENT;
 
 pub type Bytes32 = [u8; 32];
 pub type Bytes48 = [u8; 48];
@@ -265,6 +274,20 @@ pub extern "C" fn compute_kzg_proof(
     C_KZG_RET::C_KZG_OK
 }
 
+/// Given a blob and a commitment, return the KZG proof that is used to verify
+/// it against the commitment. This function does not verify that the commitment
+/// is correct with respect to the blob.
+///
+/// # Params
+///
+/// `out` - The resulting proof
+/// `blob` - A blob representing a polynomial
+/// `commitment_bytes` - Commitment to verify
+/// `s` - The trusted setup
+///
+/// # Return
+///
+/// Value of type `C_KZG_RET` indicating error status.
 #[no_mangle]
 pub extern "C" fn compute_blob_kzg_proof(
     out: *mut KZGProof,
@@ -272,7 +295,39 @@ pub extern "C" fn compute_blob_kzg_proof(
     commitment_bytes: *const Bytes48,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
-    todo!()
+    let mut commitment_slice = unsafe { *commitment_bytes };
+    let input_blob: [u8; BYTES_PER_BLOB] =
+        unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
+
+    // Do conversions first to fail fast, compute_challenge is expensive
+    let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+    let Ok(polynomial) = utils::blob_to_polynomial(&input_blob) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    // get the point fr_z (i.e. "x") from fr where evaluate the polynomial
+    // Compute the challenge for the given blob/commitment
+    let Ok(fr_z) = utils::compute_challenge(
+        &input_blob,
+        &commitment_g1,
+    ) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let fr_y: FE = polynomial.evaluate(&fr_z);
+    let kzg = KZG::new(utils::create_srs());
+    let proof = kzg.open(&fr_z, &fr_y, &polynomial);
+    let Ok(compressed_proof) = compress_g1_point(&proof) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    unsafe {
+        std::ptr::copy(compressed_proof.as_ptr(), out as *mut u8, BYTES_PER_PROOF);
+    }
+
+    C_KZG_RET::C_KZG_OK
 }
 
 #[no_mangle]
@@ -333,6 +388,9 @@ pub extern "C" fn verify_blob_kzg_proof(
     unsafe {
         *ok = false;
     }
+    let input_blob: [u8; BYTES_PER_BLOB] =
+        unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
+
     let mut commitment_slice = unsafe { *commitment_bytes };
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
@@ -343,10 +401,30 @@ pub extern "C" fn verify_blob_kzg_proof(
     let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
+    let Ok(polynomial) = utils::blob_to_polynomial(&input_blob) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
 
-    // TODO!!! blob
+    let Ok(evaluation_challenge_fr) = utils::compute_challenge(
+        &input_blob,
+        &commitment_g1,
+    ) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
 
-    todo!()
+    let y_fr: FE = polynomial.evaluate(&evaluation_challenge_fr);
+
+    // FIXME: We should not use create_src() for this instantiation.
+    let kzg = KZG::new(utils::create_srs());
+    let ret = kzg.verify(&evaluation_challenge_fr, &y_fr, &commitment_g1, &proof_g1);
+
+    if ret {
+        unsafe {
+            *ok = true;
+        }
+    }
+
+    C_KZG_RET::C_KZG_OK
 }
 
 #[no_mangle]
