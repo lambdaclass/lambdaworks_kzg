@@ -349,6 +349,23 @@ pub extern "C" fn verify_blob_kzg_proof(
     todo!()
 }
 
+/// Given a list of blobs and blob KZG proofs, verify that they correspond to the
+/// provided commitments.
+///
+/// This function assumes that `n` is trusted and that all input arrays
+/// contain `n` elements. `n` should be the actual size of the arrays and not
+/// read off a length field in the protocol.
+///
+/// This function accepts if called with `n==0`.
+///
+/// # Params
+///
+/// * `ok` - True if the proofs are valid, otherwise false
+/// * `blobs` - Array of blobs to verify
+/// * `commitments_bytes` - Array of commitments to verify
+/// * `proofs_bytes` - Array of proofs used for verification
+/// * `n` - The number of blobs/commitments/proofs
+/// * `s` - The trusted setup
 #[no_mangle]
 pub extern "C" fn verify_blob_kzg_proof_batch(
     ok: *mut bool,
