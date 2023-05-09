@@ -205,7 +205,28 @@ pub extern "C" fn blob_to_kzg_commitment(
     blob: *const Blob,
     s: *const KZGSettings,
 ) -> C_KZG_RET {
-    todo!()
+    let s_struct = unsafe { (*s).clone() };
+    let input_blob: [u8; BYTES_PER_BLOB] =
+        unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
+
+    let Ok(polynomial) = utils::blob_to_polynomial(&input_blob) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    let kzg = crate::KZG::new(crate::utils::create_srs());
+    let commitment: ShortWeierstrassProjectivePoint<BLS12381Curve> = kzg.commit(&polynomial);
+    let Ok(commitment_bytes) = compress_g1_point(&commitment) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+
+    unsafe {
+        std::ptr::copy(
+            commitment_bytes.as_ptr(),
+            out as *mut u8,
+            BYTES_PER_COMMITMENT,
+        );
+    }
+    C_KZG_RET::C_KZG_OK
 }
 
 ///
