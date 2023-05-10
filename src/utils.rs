@@ -1,8 +1,10 @@
-use crate::commitments::kzg::{FrElement, StructuredReferenceString, G1};
+use crate::commitments::kzg::{StructuredReferenceString, G1};
 use crate::compress::compress_g1_point;
 use crate::math::cyclic_group::IsGroup;
+use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelThreeResidue;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::errors::ByteConversionError;
+use crate::math::field::extensions::quadratic::QuadraticExtensionField;
 use crate::math::unsigned_integer::element::U256;
 use crate::math::{
     elliptic_curve::{
@@ -14,31 +16,33 @@ use crate::math::{
     polynomial::Polynomial,
     traits::ByteConversion,
 };
+use crate::FieldElement;
 use crate::{
-    G1Point, BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT, FE, FIAT_SHAMIR_PROTOCOL_DOMAIN,
-    FIELD_ELEMENTS_PER_BLOB,
+    G1Point, G2Point, BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT, FE, FIAT_SHAMIR_PROTOCOL_DOMAIN,
+    FIELD_ELEMENTS_PER_BLOB, RANDOM_CHALLENGE_KZG_BATCH_DOMAIN,
 };
+use itertools::izip;
 use rand::Rng;
 
 pub fn blob_to_polynomial(
     input_blob: &[u8; BYTES_PER_BLOB],
-) -> Result<Polynomial<FrElement>, ByteConversionError>
+) -> Result<Polynomial<FE>, ByteConversionError>
 where
-    FrElement: ByteConversion,
+    FE: ByteConversion,
 {
     let mut coefficients = Vec::new();
 
     for elem_bytes in input_blob.chunks(BYTES_PER_FIELD_ELEMENT) {
-        let f = FrElement::from_bytes_be(elem_bytes)?;
+        let f = FE::from_bytes_be(elem_bytes)?;
         coefficients.push(f);
     }
 
     Ok(Polynomial::new(&coefficients))
 }
 
-pub fn polynomial_to_blob(polynomial: &Polynomial<FrElement>) -> Vec<u8>
+pub fn polynomial_to_blob(polynomial: &Polynomial<FE>) -> Vec<u8>
 where
-    FrElement: ByteConversion,
+    FE: ByteConversion,
 {
     let coefficients = polynomial.coefficients();
 
@@ -49,10 +53,10 @@ where
 }
 
 pub fn polynomial_to_blob_with_size(
-    polynomial: &Polynomial<FrElement>,
+    polynomial: &Polynomial<FE>,
 ) -> Result<[u8; BYTES_PER_BLOB], Vec<u8>>
 where
-    FrElement: ByteConversion,
+    FE: ByteConversion,
 {
     let coefficients = polynomial.coefficients();
     let mut ret_vec: Vec<u8> = coefficients
@@ -80,7 +84,7 @@ pub fn create_srs() -> StructuredReferenceString<
     <BLS12381AtePairing as IsPairing>::G2Point,
 > {
     let mut rng = rand::thread_rng();
-    let toxic_waste = FrElement::new(U256 {
+    let toxic_waste = FE::new(U256 {
         limbs: [
             rng.gen::<u64>(),
             rng.gen::<u64>(),
@@ -110,11 +114,11 @@ pub fn create_srs() -> StructuredReferenceString<
 ///
 /// # Returns
 ///
-/// FrElement corresponding to the field element value.
+/// FE corresponding to the field element value.
 pub fn compute_challenge(
     blob: &[u8; BYTES_PER_BLOB],
     commitment_g1: &G1Point,
-) -> Result<FrElement, Vec<u8>> {
+) -> Result<FE, Vec<u8>> {
     // insert the values in the string, hash and get the field element
     // concat:
     // - FIAT_SHAMIR_PROTOCOL_DOMAIN
@@ -135,25 +139,97 @@ pub fn compute_challenge(
 
 /// Hashes the input sting and returns the field element corresponding to
 /// the hash coverted to field
-fn hash_field_unsafe(input_slice: &[u8]) -> Result<FrElement, Vec<u8>> {
+fn hash_field_unsafe(input_slice: &[u8]) -> Result<FE, Vec<u8>> {
     let ret_hash = sha256::digest(input_slice);
     let mut bytes_hash = [0u8; 32];
     hex::decode_to_slice(&ret_hash, &mut bytes_hash as &mut [u8]).map_err(|_| Vec::new())?;
     // FIXME! This should be changed to a hash to field method
-    FrElement::from_bytes_be(&bytes_hash).map_err(|_| Vec::new())
+    FE::from_bytes_be(&bytes_hash).map_err(|_| Vec::new())
+}
+
+fn compute_powers(x: &FE, n: usize) -> Vec<FE> {
+    let mut current_power = FE::one();
+    let mut powers = Vec::with_capacity(n);
+    for _i in 0..n {
+        powers.push(current_power.clone());
+        current_power = current_power * x;
+    }
+    powers
+}
+
+pub fn compute_r_powers(
+    commitments_g1: &[G1Point],
+    zs_fr: &[FE],
+    ys_fr: &[FE],
+    proofs_g1: &[G1Point],
+) -> Result<Vec<FE>, Vec<u8>> {
+    let n = commitments_g1.len();
+    let mut bytes: Vec<u8> = RANDOM_CHALLENGE_KZG_BATCH_DOMAIN
+        .into_iter()
+        .chain(FIELD_ELEMENTS_PER_BLOB.to_le_bytes().into_iter())
+        .chain(n.to_le_bytes().into_iter())
+        .collect();
+
+    for (commitment, z, y, proof) in izip!(
+        commitments_g1.iter(),
+        zs_fr.iter(),
+        ys_fr.iter(),
+        proofs_g1.iter()
+    ) {
+        // TODO: make it beautiful
+        let mut input_hash = Vec::<u8>::new();
+        input_hash.extend_from_slice(compress_g1_point(commitment)?.as_slice());
+        input_hash.extend_from_slice(&z.to_bytes_be());
+        input_hash.extend_from_slice(&y.to_bytes_be());
+        input_hash.extend_from_slice(compress_g1_point(proof)?.as_slice());
+
+        bytes.append(&mut input_hash);
+    }
+
+    // Now let's create the challenge!
+    let hash_fr = hash_field_unsafe(&bytes)?;
+    Ok(compute_powers(&hash_fr, n))
+}
+
+/// Perform pairings and test whether the outcomes are equal in G_T.
+///
+/// Tests whether `e(a1, a2) == e(b1, b2)`.
+///
+/// # Params
+///
+/// * `a1` - A G1 group point for the first pairing
+/// * `a2` - A G2 group point for the first pairing
+/// * `b1` - A G1 group point for the second pairing
+/// * `b2` - A G2 group point for the second pairing
+///
+/// # Returns
+///
+/// * true  The pairings were equal
+/// * false The pairings were not equal
+pub fn pairings_verify(a1: &G1Point, a2: &G2Point, b1: &G1Point, b2: &G2Point) -> bool {
+    // As an optimisation, we want to invert one of the pairings,
+    // so we negate one of the points.
+    let a1neg = a1.neg();
+    let aa1 = a1neg.to_affine();
+    let bb1 = b1.to_affine();
+    let aa2 = a2.to_affine();
+    let bb2 = b2.to_affine();
+
+    let pairs = vec![(&aa1, &aa2), (&bb1, &bb2)];
+    let gt_point = BLS12381AtePairing::compute_batch(&pairs);
+    FieldElement::<QuadraticExtensionField<LevelThreeResidue>>::one() == gt_point
 }
 
 #[cfg(test)]
 mod tests {
     use super::{blob_to_polynomial, polynomial_to_blob_with_size};
-    use crate::commitments::kzg::FrElement;
     use crate::math::field::element::FieldElement;
     use crate::math::polynomial::Polynomial;
     use crate::FE;
 
     #[test]
     fn test_poly_to_blob_and_viceversa() {
-        let polynomial = Polynomial::<FrElement>::new(&[FieldElement::one()]);
+        let polynomial = Polynomial::<FE>::new(&[FieldElement::one()]);
         let blob = polynomial_to_blob_with_size(&polynomial).unwrap();
         let poly_from_blob = blob_to_polynomial(&blob).unwrap();
 

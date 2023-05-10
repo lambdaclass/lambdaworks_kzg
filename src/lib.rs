@@ -7,6 +7,8 @@ pub mod math;
 pub mod utils;
 
 use crate::compress::{compress_g1_point, decompress_g1_point};
+use crate::math::cyclic_group::IsGroup;
+use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::unsigned_integer::element::U256;
 use commitments::{
     kzg::{FrElement, FrField, KateZaveruchaGoldberg},
@@ -22,6 +24,7 @@ use math::{
         point::ShortWeierstrassProjectivePoint,
     },
     field::element::FieldElement,
+    msm::g1_lincomb,
     traits::ByteConversion,
 };
 use std::marker;
@@ -49,6 +52,8 @@ pub enum C_KZG_RET {
 
 /** The domain separator for the Fiat-Shamir protocol. */
 pub const FIAT_SHAMIR_PROTOCOL_DOMAIN: [u8; 16] = *b"FSBLOBVERIFY_V1_";
+
+pub const RANDOM_CHALLENGE_KZG_BATCH_DOMAIN: [u8; 16] = *b"RCKZGBATCH___V1_";
 
 /** Length of the domain strings above. */
 pub const DOMAIN_STR_LENGTH: usize = 16;
@@ -467,6 +472,7 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
         }
         1 => verify_blob_kzg_proof(ok, blobs, commitments_bytes, proofs_bytes, s),
         n => {
+            let s_struct = unsafe { (*s).clone() };
             let commitments_slice_array =
                 unsafe { std::slice::from_raw_parts(commitments_bytes, n) };
             let mut commitments_g1_vec = Vec::<G1Point>::new();
@@ -484,7 +490,7 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
 
             for i in 0..n {
                 // fill the vector of commitments
-                let mut g1_point_compressed = commitments_slice_array[i].clone();
+                let mut g1_point_compressed = commitments_slice_array[i];
                 let Ok(commitment_g1) = decompress_g1_point(&mut g1_point_compressed) else {
                     return C_KZG_RET::C_KZG_ERROR;
                 };
@@ -511,19 +517,99 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
                 commitments_g1_vec.push(commitment_g1);
                 polynomial_vec.push(polynomial);
 
-                let mut proof_slice = proofs_slice_array[i].clone();
+                let mut proof_slice = proofs_slice_array[i];
                 let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
                     return C_KZG_RET::C_KZG_ERROR;
                 };
                 proofs_vec.push(proof_g1);
             }
-            // TODO! ret = verify_kzg_proof_batch(
-            //    ok, commitments_g1, evaluation_challenges_fr, ys_fr, proofs_g1, n, s
-            //);
+            let Ok(ret_verify) = verify_kzg_proof_batch(
+                &commitments_g1_vec,
+                &challenges_vec,
+                &evaluations_vec,
+                &proofs_vec,
+                n,
+                &s_struct,
+            ) else {
+                return C_KZG_RET::C_KZG_ERROR;
+            };
+            unsafe {
+                *ok = ret_verify;
+            }
 
             C_KZG_RET::C_KZG_OK
         }
     }
+}
+
+///
+/// Helper function for verify_blob_kzg_proof_batch(): actually perform the
+/// verification.
+///
+/// Remark: This function assumes that `n` is trusted and that all input arrays
+///     contain `n` elements. `n` should be the actual size of the arrays and not
+///     read off a length field in the protocol.
+///
+/// Remark: This function only works for `n > 0`.
+///
+/// # Params
+///
+/// * `ok` - True if the proofs are valid, otherwise false
+/// * `commitments_g1` - Array of commitments to verify
+/// * `zs_fr` - Array of evaluation points for the KZG proofs
+/// * `ys_fr` - Array of evaluation results for the KZG proofs
+/// * `proofs_g1` - Array of proofs used for verification
+/// * `n` - The number of blobs/commitments/proofs
+/// * `s` - The trusted setup
+///
+/// # Returns
+///
+/// * `Ok(true)` if the proofs are valid, otherwise `Ok(false)`
+fn verify_kzg_proof_batch(
+    commitments_g1: &[G1Point],
+    zs_fr: &[FE],
+    ys_fr: &[FE],
+    proofs_g1: &[G1Point],
+    n: usize,
+    s: &KZGSettings,
+) -> Result<bool, Vec<u8>> {
+    let r_powers: Vec<_> = utils::compute_r_powers(commitments_g1, zs_fr, ys_fr, proofs_g1)?
+        .iter()
+        .map(|x| x.representative())
+        .collect();
+
+    let mut c_minus_y = Vec::new();
+    let mut r_times_z = Vec::new();
+    // Compute \sum r^i * Proof_i
+    let proof_lincomb = g1_lincomb(proofs_g1, &r_powers);
+    let g = BLS12381Curve::generator();
+
+    for i in 0..n {
+        let ys_encrypted = g.operate_with_self(ys_fr[i].representative());
+        // Get C_i - [y_i]
+        let c_i = commitments_g1[i].clone();
+        let c_minus_y_elem = c_i.operate_with(&ys_encrypted.neg());
+        c_minus_y.push(c_minus_y_elem);
+
+        // Get r^i * z_i
+        let r_i = FE::from(&r_powers[i]);
+        let zs_fr_i = zs_fr[i].clone();
+        let r_times_z_elem = r_i * zs_fr_i;
+        r_times_z.push(r_times_z_elem.representative());
+    }
+
+    //  Get \sum r^i z_i Proof_i
+    let proof_z_lincomb = g1_lincomb(proofs_g1, &r_times_z);
+    //
+    // Get \sum r^i (C_i - [y_i])
+    let c_minus_y_lincomb = g1_lincomb(&c_minus_y, &r_powers);
+
+    // Get c_minus_y_lincomb + proof_z_lincomb
+    let rhs_g1 = c_minus_y_lincomb.operate_with(&proof_z_lincomb);
+
+    // FIXME: check this ⚠️ ⚠️ ⚠️
+    let kzg = KZG::new(utils::create_srs());
+    Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }
 
 #[cfg(test)]
