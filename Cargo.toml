@@ -16,6 +16,23 @@ itertools = "0.10"
 proptest = "1.1.0"
 criterion = "0.4"
 const-random = "0.1.15"
+iai = "0.1"
 
 [lib]
 crate-type = ["cdylib"]
+
+[[bench]]
+name = "criterion_polynomial"
+harness = false
+
+[[bench]]
+name = "iai_polynomial"
+harness = false
+
+[[bench]]
+name = "criterion_field"
+harness = false
+
+[[bench]]
+name = "iai_field"
+harness = false
