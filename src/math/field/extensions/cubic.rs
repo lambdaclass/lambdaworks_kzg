@@ -1,5 +1,5 @@
-use crate::field::element::FieldElement;
-use crate::field::traits::IsField;
+use crate::math::field::element::FieldElement;
+use crate::math::field::traits::IsField;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
@@ -136,7 +136,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::field::fields::u64_prime_field::{U64FieldElement, U64PrimeField};
+    use crate::math::field::fields::u64_prime_field::{U64FieldElement, U64PrimeField};
 
     const ORDER_P: u64 = 13;
 

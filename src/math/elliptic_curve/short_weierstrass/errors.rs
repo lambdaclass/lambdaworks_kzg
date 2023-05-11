@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::errors::ByteConversionError;
+use crate::math::errors::ByteConversionError;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum DeserializationError {
@@ -17,6 +17,9 @@ impl From<ByteConversionError> for DeserializationError {
         match error {
             ByteConversionError::FromBEBytesError => DeserializationError::FieldFromBytesError,
             ByteConversionError::FromLEBytesError => DeserializationError::FieldFromBytesError,
+            ByteConversionError::InvalidValue => todo!(),
+            ByteConversionError::PointNotInSubgroup => todo!(),
+            ByteConversionError::ValueNotCompressed => todo!(),
         }
     }
 }

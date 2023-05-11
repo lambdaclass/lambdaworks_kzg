@@ -59,7 +59,7 @@ impl<E: IsShortWeierstrass> FromAffine<E::BaseField> for ShortWeierstrassProject
     fn from_affine(
         x: FieldElement<E::BaseField>,
         y: FieldElement<E::BaseField>,
-    ) -> Result<Self, crate::elliptic_curve::traits::EllipticCurveError> {
+    ) -> Result<Self, crate::math::elliptic_curve::traits::EllipticCurveError> {
         if E::defining_equation(&x, &y) != FieldElement::zero() {
             Err(EllipticCurveError::InvalidPoint)
         } else {

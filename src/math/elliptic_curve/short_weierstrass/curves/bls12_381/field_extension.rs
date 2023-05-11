@@ -93,7 +93,7 @@ impl ByteConversion for FieldElement<Degree2ExtensionField> {
         byte_slice
     }
 
-    fn from_bytes_be(bytes: &[u8]) -> Result<Self, crate::errors::ByteConversionError>
+    fn from_bytes_be(bytes: &[u8]) -> Result<Self, crate::math::errors::ByteConversionError>
     where
         Self: std::marker::Sized,
     {
@@ -103,7 +103,7 @@ impl ByteConversion for FieldElement<Degree2ExtensionField> {
         Ok(Self::new([x0, x1]))
     }
 
-    fn from_bytes_le(bytes: &[u8]) -> Result<Self, crate::errors::ByteConversionError>
+    fn from_bytes_le(bytes: &[u8]) -> Result<Self, crate::math::errors::ByteConversionError>
     where
         Self: std::marker::Sized,
     {

@@ -540,13 +540,13 @@ mod tests_u384_prime_fields {
 
 #[cfg(test)]
 mod tests_u256_prime_fields {
-    use crate::field::element::FieldElement;
-    use crate::field::fields::montgomery_backed_prime_fields::{IsModulus, U256PrimeField};
-    use crate::field::traits::IsField;
-    use crate::field::traits::IsPrimeField;
-    use crate::traits::ByteConversion;
-    use crate::unsigned_integer::element::UnsignedInteger;
-    use crate::unsigned_integer::element::U256;
+    use crate::math::field::element::FieldElement;
+    use crate::math::field::fields::montgomery_backed_prime_fields::{IsModulus, U256PrimeField};
+    use crate::math::field::traits::IsField;
+    use crate::math::field::traits::IsPrimeField;
+    use crate::math::traits::ByteConversion;
+    use crate::math::unsigned_integer::element::UnsignedInteger;
+    use crate::math::unsigned_integer::element::U256;
 
     #[derive(Clone, Debug)]
     struct U256Modulus29;
