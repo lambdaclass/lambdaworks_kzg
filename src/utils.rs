@@ -1,4 +1,4 @@
-use crate::commitments::kzg::{StructuredReferenceString, G1};
+use crate::commitments::kzg::StructuredReferenceString;
 use crate::compress::compress_g1_point;
 use crate::math::cyclic_group::IsGroup;
 use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelThreeResidue;
@@ -19,7 +19,7 @@ use crate::math::{
 use crate::FieldElement;
 use crate::{
     G1Point, G2Point, BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT, FE, FIAT_SHAMIR_PROTOCOL_DOMAIN,
-    FIELD_ELEMENTS_PER_BLOB, RANDOM_CHALLENGE_KZG_BATCH_DOMAIN,
+    FIELD_ELEMENTS_PER_BLOB, G1, RANDOM_CHALLENGE_KZG_BATCH_DOMAIN,
 };
 use itertools::izip;
 use rand::Rng;

@@ -9,11 +9,12 @@ use crate::math::{
 #[derive(Clone, Debug)]
 pub struct FrConfig;
 
+pub const MODULUS: U256 =
+    U256::from_hex_unchecked("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
+
 /// Modulus of bls 12 381 subgroup
 impl IsModulus<U256> for FrConfig {
-    const MODULUS: U256 = U256::from_hex_unchecked(
-        "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
-    );
+    const MODULUS: U256 = MODULUS;
 }
 
 /// FrField using MontgomeryBackend for bls 12 381

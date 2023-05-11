@@ -252,6 +252,8 @@ impl<F: IsPrimeField, P: IsPairing> IsCommitmentScheme<F> for KateZaveruchaGoldb
 
 #[cfg(test)]
 mod tests {
+    use super::{KateZaveruchaGoldberg, StructuredReferenceString};
+    use crate::commitments::traits::IsCommitmentScheme;
     use crate::math::{
         cyclic_group::IsGroup,
         elliptic_curve::{
@@ -271,13 +273,8 @@ mod tests {
         traits::{Deserializable, Serializable},
         unsigned_integer::element::U256,
     };
-
-    use crate::commitments::traits::IsCommitmentScheme;
-
-    use super::{KateZaveruchaGoldberg, StructuredReferenceString};
+    use crate::G1;
     use rand::Rng;
-
-    type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 
     #[allow(clippy::upper_case_acronyms)]
     type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;

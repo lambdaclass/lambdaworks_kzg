@@ -9,11 +9,7 @@ pub mod utils;
 use crate::compress::{compress_g1_point, decompress_g1_point};
 use crate::math::cyclic_group::IsGroup;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
-use crate::math::unsigned_integer::element::U256;
-use commitments::{
-    kzg::{FrElement, FrField, KateZaveruchaGoldberg},
-    traits::IsCommitmentScheme,
-};
+use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
 use math::polynomial::Polynomial;
 use math::{
     elliptic_curve::short_weierstrass::{
@@ -33,8 +29,13 @@ pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
 pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
-pub const MODULUS: U256 =
-    U256::from("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001");
+pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
+    FrConfig, FrElement, FrField, MODULUS,
+};
+
+pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
+#[allow(clippy::upper_case_acronyms)]
+type FE = FrElement;
 
 #[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
@@ -148,13 +149,6 @@ pub struct blst_p2_affine {
     pub x: blst_fp2,
     pub y: blst_fp2,
 }
-
-type FE = FieldElement<
-    math::field::fields::montgomery_backed_prime_fields::MontgomeryBackendPrimeField<
-        commitments::kzg::FrConfig,
-        4,
-    >,
->;
 
 //typedef struct { limb_t l[256/8/sizeof(limb_t)]; } blst_fr;
 //typedef struct { limb_t l[384/8/sizeof(limb_t)]; } blst_fp;
@@ -643,9 +637,9 @@ mod tests {
     };
     use crate::utils::polynomial_to_blob_with_size;
     use crate::{
-        blst_fr, blst_p1, blst_p2, commitments::kzg::FrElement, compute_kzg_proof, fr_t,
-        verify_blob_kzg_proof_batch, verify_kzg_proof, Blob, Bytes32, Bytes48, FFTSettings,
-        G1Point, KZGProof, KZGSettings, BYTES_PER_BLOB, C_KZG_RET, FE,
+        blst_fr, blst_p1, blst_p2, compute_kzg_proof, fr_t, verify_blob_kzg_proof_batch,
+        verify_kzg_proof, Blob, Bytes32, Bytes48, FFTSettings, FrElement, G1Point, KZGProof,
+        KZGSettings, BYTES_PER_BLOB, C_KZG_RET, FE,
     };
 
     #[test]
