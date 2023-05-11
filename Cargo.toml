@@ -16,6 +16,7 @@ itertools = "0.10"
 proptest = "1.1.0"
 criterion = "0.4"
 const-random = "0.1.15"
+iai = "0.1"
 
 [lib]
 crate-type = ["cdylib"]
