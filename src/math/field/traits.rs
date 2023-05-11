@@ -21,21 +21,24 @@ pub enum RootsConfig {
 /// A two-adic primitive root of unity is a number w that satisfies w^(2^n) = 1
 /// and w^(j) != 1 for every j below 2^n. With this primitive root we can generate
 /// any other root of unity we need to perform FFT.
-pub trait IsTwoAdicField: IsField {
+pub trait IsFFTField: IsField {
     const TWO_ADICITY: u64;
     const TWO_ADIC_PRIMITVE_ROOT_OF_UNITY: Self::BaseType;
 
+    /// Used for searching this field's implementation in other languages, e.g in MSL
+    /// for executing parallel operations with the Metal API.
+    fn field_name() -> String {
+        "".to_string()
+    }
+
     /// Returns a primitive root of unity of order $2^{order}$.
-    fn get_primitive_root_of_unity<F: IsTwoAdicField>(
+    fn get_primitive_root_of_unity<F: IsFFTField>(
         order: u64,
     ) -> Result<FieldElement<F>, FieldError> {
         let two_adic_primitive_root_of_unity =
             FieldElement::new(F::TWO_ADIC_PRIMITVE_ROOT_OF_UNITY);
         if order == 0 {
-            return Err(FieldError::RootOfUnityError(
-                "Cannot get root of unity for order = 0".to_string(),
-                order,
-            ));
+            return Ok(FieldElement::one());
         }
         if order > F::TWO_ADICITY {
             return Err(FieldError::RootOfUnityError(
