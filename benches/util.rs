@@ -1,5 +1,5 @@
 use const_random::const_random;
-use lambdaworks_math::{field::fields::u64_prime_field::U64FieldElement, polynomial::Polynomial};
+use lambdaworks_kzg::{field::fields::u64_prime_field::U64FieldElement, polynomial::Polynomial};
 use rand::random;
 
 // Mersenne prime numbers
