@@ -4,6 +4,7 @@
 pub mod commitments;
 pub mod compress;
 pub mod math;
+pub mod srs;
 pub mod utils;
 
 use crate::compress::{compress_g1_point, decompress_g1_point};
@@ -75,6 +76,13 @@ pub const BYTES_PER_BLOB: usize = FIELD_ELEMENTS_PER_BLOB * BYTES_PER_FIELD_ELEM
 
 pub const CHALLENGE_INPUT_SIZE: usize =
     DOMAIN_STR_LENGTH + 16 + BYTES_PER_BLOB + BYTES_PER_COMMITMENT;
+
+pub const BYTES_PER_G1_POINT: usize = 48;
+pub const BYTES_PER_G2_POINT: usize = 96;
+
+/// Number of G2 points required for the kzg trusted setup.
+/// 65 is fixed and is used for providing multiproofs up to 64 field elements.
+pub const NUM_G2_POINTS: usize = 65;
 
 pub type Bytes32 = [u8; 32];
 pub type Bytes48 = [u8; 48];
@@ -626,6 +634,17 @@ fn verify_kzg_proof_batch(
     let kzg = KZG::new(utils::create_srs());
     Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }
+
+/* TODO: implement
+C_KZG_RET load_trusted_setup_file(KZGSettings *out, FILE *in);
+C_KZG_RET load_trusted_setup(
+    KZGSettings *out,
+    const uint8_t *g1_bytes, /* n1 * 48 bytes */
+    size_t n1,
+    const uint8_t *g2_bytes, /* n2 * 96 bytes */
+    size_t n2
+);
+*/
 
 #[cfg(test)]
 mod tests {
