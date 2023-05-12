@@ -2,7 +2,7 @@ use crate::math::cyclic_group::IsGroup;
 use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::Degree2ExtensionField;
 use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::twist::BLS12381TwistCurve;
 use crate::math::elliptic_curve::traits::FromAffine;
-use crate::math::field::element::FieldElement;
+use crate::math::field::element::{FieldElement, LegendreSymbol};
 use crate::math::field::extensions::quadratic::QuadraticExtensionFieldElement;
 use crate::math::{errors::ByteConversionError, traits::ByteConversion};
 use crate::MODULUS;
@@ -10,6 +10,8 @@ use crate::{BLS12381FieldElement, G2Point};
 use crate::{BLS12381TwistCurveFieldElement, G1Point};
 use std::cmp::Ordering;
 use std::ops::Neg;
+
+pub type QFE = FieldElement<crate::math::field::extensions::quadratic::QuadraticExtensionField<crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue>>;
 
 pub fn check_point_is_in_subgroup(point: &G1Point) -> bool {
     let inf = G1Point::neutral_element();
@@ -67,10 +69,11 @@ pub fn decompress_g1_point(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteCo
 }
 
 pub fn decompress_g2_point(input_bytes: &mut [u8; 96]) -> Result<G2Point, ByteConversionError> {
-    //let input1 = &input_bytes[0..48];
-    //let input2 = &input_bytes[48..96];
+    let binding = input_bytes[48..96].to_owned();
+    let input0 = binding.as_slice();
+    let input1 = &mut input_bytes[0..48];
 
-    let first_byte = input_bytes.first().unwrap();
+    let first_byte = input1.first().unwrap();
     // We get the first 3 bits
     let prefix_bits = first_byte >> 5;
     let first_bit = (prefix_bits & 4_u8) >> 2;
@@ -87,21 +90,96 @@ pub fn decompress_g2_point(input_bytes: &mut [u8; 96]) -> Result<G2Point, ByteCo
     let third_bit = prefix_bits & 1_u8;
 
     let first_byte_without_contorl_bits = (first_byte << 3) >> 3;
-    input_bytes[0] = first_byte_without_contorl_bits;
+    input1[0] = first_byte_without_contorl_bits;
 
-    let point = BLS12381TwistCurveFieldElement::from_bytes_be(input_bytes).unwrap();
+    let x0 = BLS12381FieldElement::from_bytes_be(input0).unwrap();
+    let x1 = BLS12381FieldElement::from_bytes_be(input1).unwrap();
+    let x: QFE = QuadraticExtensionFieldElement::new([x0, x1]);
 
-    let x0 = BLS12381FieldElement::from(2u64);
-    let x1 = BLS12381FieldElement::from(2u64);
+    // TODO: calculate sqrt
 
-    let y0 = BLS12381FieldElement::from(2u64);
-    let y1 = BLS12381FieldElement::from(2u64);
+    //let y0 = BLS12381FieldElement::from(2u64);
+    //let y1 = BLS12381FieldElement::from(2u64);
+    //let y = QuadraticExtensionFieldElement::new([y0, y1]);
 
-    let x = QuadraticExtensionFieldElement::new([x0, x1]);
-    let y = QuadraticExtensionFieldElement::new([y0, y1]);
-
-    let point = G2Point::from_affine(x, y).unwrap();
+    //let point = G2Point::from_affine(x, y).unwrap();
     todo!();
+}
+
+use std::ops::Mul;
+
+/// * `third_bit` - if 1, then the square root is the greater one, otherwise it is the smaller one.
+fn sqrt_qfe(input: &QFE, third_bit: u8) -> Option<QFE> {
+    // Algorithm 9, https://eprint.iacr.org/2012/685.pdf
+    if *input == QFE::zero() {
+        Some(QFE::zero())
+    } else {
+        let a = input.value()[0].clone();
+        let b = input.value()[1].clone();
+        if b == crate::BLS12381FieldElement::zero() {
+            // second part is zero
+            let (y_sqrt_1, y_sqrt_2) = a.sqrt()?;
+            println!("y_sqrt_1: {:?}", y_sqrt_1);
+
+            let y_aux = match (
+                y_sqrt_1.representative().cmp(&y_sqrt_2.representative()),
+                third_bit,
+            ) {
+                (Ordering::Greater, 0) => y_sqrt_2,
+                (Ordering::Greater, _) => y_sqrt_1,
+                (Ordering::Less, 0) => y_sqrt_1,
+                (Ordering::Less, _) => y_sqrt_2,
+                (Ordering::Equal, _) => y_sqrt_1,
+            };
+
+            Some(QFE::new([y_aux, crate::BLS12381FieldElement::zero()]))
+        } else {
+            // second part of the input field number is non-zero
+
+            // instead of "sum" is -beta
+            let alpha = a.pow(2u64) + b.pow(2u64);
+            let gamma = alpha.legendre_symbol();
+            match gamma {
+                LegendreSymbol::One => {
+                    let two = BLS12381FieldElement::from(2u64);
+                    let two_inv = two.inv();
+                    // calculate the square root of alpha
+                    let (y_sqrt1, y_sqrt2) = alpha.sqrt()?;
+                    println!("LegendreSymbol::One y_sqrt1: {:?}", y_sqrt1);
+
+                    let mut delta = (a.clone() + y_sqrt1) * two_inv.clone();
+
+                    let legendre_delta = delta.legendre_symbol();
+                    if legendre_delta == LegendreSymbol::MinusOne {
+                        delta = (a.clone() + y_sqrt2) * two_inv;
+                    };
+                    let (x_sqrt_1, x_sqrt_2) = delta.sqrt()?;
+                    println!("LegendreSymbol::One x_sqrt_1: {:?}", x_sqrt_1);
+
+                    let x_0 = match (
+                        x_sqrt_1.representative().cmp(&x_sqrt_2.representative()),
+                        third_bit,
+                    ) {
+                        (Ordering::Greater, 0) => x_sqrt_2,
+                        (Ordering::Greater, _) => x_sqrt_1,
+                        (Ordering::Less, 0) => x_sqrt_1,
+                        (Ordering::Less, _) => x_sqrt_2,
+                        (Ordering::Equal, _) => x_sqrt_1,
+                    };
+                    let x_1 = a * (two * x_0.clone()).inv();
+
+                    Some(QFE::new([x_0, x_1]))
+                }
+                LegendreSymbol::MinusOne => {
+                    println!("### LegendreSymbol::MinusOne");
+                    None
+                }
+                LegendreSymbol::Zero => {
+                    unreachable!("The input is zero, but we already handled this case.")
+                }
+            }
+        }
+    }
 }
 
 pub fn compress_g1_point(point: &G1Point) -> Result<[u8; 48], Vec<u8>> {
@@ -197,5 +275,20 @@ mod tests {
         let decompressed_g2 = decompress_g1_point(&mut compressed_g2).unwrap();
 
         assert_eq!(g_2, decompressed_g2);
+    }
+
+    #[test]
+    fn test_sqrt_qfe() {
+        let b = BLS12381FieldElement::from_hex(
+            "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+        ).unwrap();
+        let a = BLS12381FieldElement::from_hex(
+        "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+        ).unwrap();
+        let qfe = super::QFE::new([a, b]);
+        let sqrt_qfe = super::sqrt_qfe(&qfe, 1).unwrap();
+
+        println!("{:?}", sqrt_qfe);
+        //p2 = ([0x02, 0x00],[0x013a59858b6809fca4d9a3b6539246a70051a3c88899964a42bc9a69cf9acdd9dd387cfa9086b894185b9a46a402be73,0x02d27e0ec3356299a346a09ad7dc4ef68a483c3aed53f9139d2f929a3eecebf72082e5e58c6da24ee32e03040c406d4f])
     }
 }
