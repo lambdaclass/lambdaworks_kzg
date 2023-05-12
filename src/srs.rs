@@ -1,4 +1,5 @@
-use crate::KZGSettings;
+use crate::compress::decompress_g1_point;
+use crate::{KZGSettings, G1};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Lines};
 use std::path::Path;
@@ -31,6 +32,10 @@ where
 pub fn load_trusted_setup_file(path: &str) -> io::Result<u8> {
     let mut lines = read_lines(path)?;
 
+    let mut g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
+    let mut g1_points: Vec<G1> = Vec::new();
+    let mut g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
+    let mut g1_points: Vec<G1> = Vec::new();
     /*
     int num_matches;
     uint64_t i;
@@ -59,11 +64,44 @@ pub fn load_trusted_setup_file(path: &str) -> io::Result<u8> {
 
     println!("num_g1_points: {num_g1_points}, num_g2_points: {num_g2_points}");
 
-    for line in lines {
-        if let Ok(line) = line {
-            println!("{}", line);
+    // read all g1 points
+    for (pos, line) in lines.enumerate() {
+        let Ok(line_string) = line  else {
+            return Err(std::io::ErrorKind::InvalidData.into());
+        };
+        hex::decode_to_slice(line_string, &mut g1_bytes)
+            .map_err(|_| std::io::ErrorKind::InvalidData)?;
+
+        let g1_point =
+            decompress_g1_point(&mut g1_bytes).map_err(|_| std::io::ErrorKind::InvalidData)?;
+
+        g1_points.push(g1_point);
+
+        if pos + 1 == num_g1_points {
+            break;
         }
     }
+
+    // read all g2 points
+    /*for (pos, line) in lines.enumerate() {
+        let Ok(line_string) = line  else {
+            return Err(std::io::ErrorKind::InvalidData.into());
+        };
+        hex::decode_to_slice(line_string, &mut g2_bytes)
+            .map_err(|_| std::io::ErrorKind::InvalidData)?;
+
+
+
+        let g1_point =
+            decompress_g1_point(&mut g1_bytes).map_err(|_| std::io::ErrorKind::InvalidData)?;
+
+        g1_points.push(g1_point);
+
+        if pos + 1 == num_g2_points {
+            break;
+        }
+    }
+    */
 
     /*
     // Read all of the g1 points, byte by byte

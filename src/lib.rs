@@ -27,9 +27,12 @@ use math::{
 use std::marker;
 
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
-pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
+//pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
+pub type G2Point = <BLS12381TwistCurve as IsEllipticCurve>::PointRepresentation;
 pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
+//pub type BLS12381TwistCurveFieldElement = FieldElement<BLS12381TwistCurve>;
+pub type BLS12381TwistCurveFieldElement = FieldElement<crate::math::field::extensions::quadratic::QuadraticExtensionField<crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue>>;
 pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
     FrConfig, FrElement, FrField, MODULUS,
 };
@@ -70,6 +73,8 @@ pub const BYTES_PER_PROOF: usize = 48;
 pub const BYTES_PER_FIELD_ELEMENT: usize = 32;
 
 pub const FIELD_ELEMENTS_PER_BLOB: usize = 4096;
+
+pub const TRUSTED_SETUP_NUM_G1_POINTS: usize = FIELD_ELEMENTS_PER_BLOB;
 
 /** The number of bytes in a blob. */
 pub const BYTES_PER_BLOB: usize = FIELD_ELEMENTS_PER_BLOB * BYTES_PER_FIELD_ELEMENT;

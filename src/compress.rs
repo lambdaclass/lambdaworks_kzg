@@ -1,9 +1,13 @@
 use crate::math::cyclic_group::IsGroup;
+use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::Degree2ExtensionField;
+use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::twist::BLS12381TwistCurve;
 use crate::math::elliptic_curve::traits::FromAffine;
+use crate::math::field::element::FieldElement;
+use crate::math::field::extensions::quadratic::QuadraticExtensionFieldElement;
 use crate::math::{errors::ByteConversionError, traits::ByteConversion};
-use crate::BLS12381FieldElement;
-use crate::G1Point;
 use crate::MODULUS;
+use crate::{BLS12381FieldElement, G2Point};
+use crate::{BLS12381TwistCurveFieldElement, G1Point};
 use std::cmp::Ordering;
 use std::ops::Neg;
 
@@ -60,6 +64,44 @@ pub fn decompress_g1_point(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteCo
     check_point_is_in_subgroup(&point)
         .then_some(point)
         .ok_or(ByteConversionError::PointNotInSubgroup)
+}
+
+pub fn decompress_g2_point(input_bytes: &mut [u8; 96]) -> Result<G2Point, ByteConversionError> {
+    //let input1 = &input_bytes[0..48];
+    //let input2 = &input_bytes[48..96];
+
+    let first_byte = input_bytes.first().unwrap();
+    // We get the first 3 bits
+    let prefix_bits = first_byte >> 5;
+    let first_bit = (prefix_bits & 4_u8) >> 2;
+    // If first bit is not 1, then the value is not compressed.
+    if first_bit != 1 {
+        return Err(ByteConversionError::ValueNotCompressed);
+    }
+    let second_bit = (prefix_bits & 2_u8) >> 1;
+    // If the second bit is 1, then the compressed point is the
+    // point at infinity and we return it directly.
+    if second_bit == 1 {
+        return Ok(G2Point::neutral_element());
+    }
+    let third_bit = prefix_bits & 1_u8;
+
+    let first_byte_without_contorl_bits = (first_byte << 3) >> 3;
+    input_bytes[0] = first_byte_without_contorl_bits;
+
+    let point = BLS12381TwistCurveFieldElement::from_bytes_be(input_bytes).unwrap();
+
+    let x0 = BLS12381FieldElement::from(2u64);
+    let x1 = BLS12381FieldElement::from(2u64);
+
+    let y0 = BLS12381FieldElement::from(2u64);
+    let y1 = BLS12381FieldElement::from(2u64);
+
+    let x = QuadraticExtensionFieldElement::new([x0, x1]);
+    let y = QuadraticExtensionFieldElement::new([y0, y1]);
+
+    let point = G2Point::from_affine(x, y).unwrap();
+    todo!();
 }
 
 pub fn compress_g1_point(point: &G1Point) -> Result<[u8; 48], Vec<u8>> {
