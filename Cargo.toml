@@ -20,3 +20,6 @@ iai = "0.1"
 
 [lib]
 crate-type = ["cdylib"]
+
+[profile.test]
+opt-level = 3
