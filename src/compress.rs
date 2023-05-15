@@ -1,13 +1,11 @@
 use crate::math::cyclic_group::IsGroup;
-use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::Degree2ExtensionField;
-use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::twist::BLS12381TwistCurve;
 use crate::math::elliptic_curve::traits::FromAffine;
 use crate::math::field::element::{FieldElement, LegendreSymbol};
 use crate::math::field::extensions::quadratic::QuadraticExtensionFieldElement;
 use crate::math::{errors::ByteConversionError, traits::ByteConversion};
+use crate::G1Point;
 use crate::MODULUS;
 use crate::{BLS12381FieldElement, G2Point};
-use crate::{BLS12381TwistCurveFieldElement, G1Point};
 use std::cmp::Ordering;
 use std::ops::Neg;
 
@@ -106,10 +104,8 @@ pub fn decompress_g2_point(input_bytes: &mut [u8; 96]) -> Result<G2Point, ByteCo
     todo!();
 }
 
-use std::ops::Mul;
-
 /// * `third_bit` - if 1, then the square root is the greater one, otherwise it is the smaller one.
-fn sqrt_qfe(input: &QFE, third_bit: u8) -> Option<QFE> {
+pub fn sqrt_qfe(input: &QFE, third_bit: u8) -> Option<QFE> {
     // Algorithm 8, https://eprint.iacr.org/2012/685.pdf
     if *input == QFE::zero() {
         Some(QFE::zero())
@@ -292,16 +288,39 @@ mod tests {
         let qfe_b = super::QFE::new([b0, b1]);
 
         let cubic_value = qfe.pow(3_u64) + qfe_b;
-        let a = super::sqrt_qfe(&cubic_value, 0).unwrap();
+        let root = super::sqrt_qfe(&cubic_value, 0).unwrap();
 
         let c0_expected = BLS12381FieldElement::from_hex("0x0ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801").unwrap();
         let c1_expected = BLS12381FieldElement::from_hex("0x0606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be").unwrap();
         let qfe_expected = super::QFE::new([c0_expected, c1_expected]);
 
-        let value_a = a.value();
+        let value_root = root.value();
         let value_qfe_expected = qfe_expected.value();
 
-        assert_eq!(value_a[0].clone(), value_qfe_expected[0].clone());
-        assert_eq!(value_a[1].clone(), value_qfe_expected[1].clone());
+        assert_eq!(value_root[0].clone(), value_qfe_expected[0].clone());
+        assert_eq!(value_root[1].clone(), value_qfe_expected[1].clone());
+    }
+
+    #[test]
+    fn test_sqrt_qfe_2() {
+        let c0 = BLS12381FieldElement::from_hex("0x02").unwrap();
+        let c1 = BLS12381FieldElement::from_hex("0x00").unwrap();
+        let qfe = super::QFE::new([c0, c1]);
+
+        let c0_expected = BLS12381FieldElement::from_hex("0x013a59858b6809fca4d9a3b6539246a70051a3c88899964a42bc9a69cf9acdd9dd387cfa9086b894185b9a46a402be73").unwrap();
+        let c1_expected = BLS12381FieldElement::from_hex("0x02d27e0ec3356299a346a09ad7dc4ef68a483c3aed53f9139d2f929a3eecebf72082e5e58c6da24ee32e03040c406d4f").unwrap();
+        let qfe_expected = super::QFE::new([c0_expected, c1_expected]);
+
+        let b1 = BLS12381FieldElement::from_hex("0x4").unwrap();
+        let b0 = BLS12381FieldElement::from_hex("0x4").unwrap();
+        let qfe_b = super::QFE::new([b0, b1]);
+
+        let root = super::sqrt_qfe(&(qfe.pow(3_u64) + qfe_b), 0).unwrap();
+
+        let value_root = root.value();
+        let value_qfe_expected = qfe_expected.value();
+
+        assert_eq!(value_root[0].clone(), value_qfe_expected[0].clone());
+        assert_eq!(value_root[1].clone(), value_qfe_expected[1].clone());
     }
 }
