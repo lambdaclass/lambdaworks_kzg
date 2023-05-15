@@ -1,7 +1,9 @@
 use crate::compress::{decompress_g1_point, decompress_g2_point};
-use crate::{G2Point, G1};
+use crate::{g1_t, g2_t, G2Point, KZGSettings, G1};
+use core::ptr::null_mut;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Lines};
+use std::marker;
 use std::path::Path;
 
 /// Helper function that reads a file line by line and
@@ -29,7 +31,7 @@ where
 /// # Returns
 ///
 /// * `KZGSettings` - The loaded trusted setup data
-pub fn load_trusted_setup_file(path: &str) -> io::Result<u8> {
+pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
     let mut lines = read_lines(path)?;
 
     let mut g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
@@ -59,7 +61,7 @@ pub fn load_trusted_setup_file(path: &str) -> io::Result<u8> {
 
     println!("num_g1_points: {num_g1_points}, num_g2_points: {num_g2_points}");
 
-    let num_total_points = num_g1_points + num_g1_points;
+    let num_total_points = num_g1_points + num_g2_points;
 
     // read all g1 points
     for (pos, line) in lines.enumerate() {
@@ -92,9 +94,38 @@ pub fn load_trusted_setup_file(path: &str) -> io::Result<u8> {
             break;
         }
     }
+    let mut zzzz: Vec<g1_t> = Vec::new();
+    let g1_values = zzzz.as_mut_ptr();
+    std::mem::forget(zzzz);
+
+    let mut zzzz2: Vec<g2_t> = Vec::new();
+    let g2_values = zzzz2.as_mut_ptr();
+    std::mem::forget(zzzz2);
+
+    let settings = KZGSettings {
+        fs: null_mut(),
+        g1_values,
+        g2_values,
+        _marker: marker::PhantomData,
+        _marker2: marker::PhantomData,
+        _marker3: marker::PhantomData,
+    };
+
+    let len_vec_g1 = g1_points.len();
+    let len_vec_g2 = g2_points.len();
+    println!("len_vec_g1: {len_vec_g1}, len_vec_g2: {len_vec_g2}");
+
+    /* TODO: add this to the KZGSettings struct
+    ret = new_fft_settings(out->fs, max_scale);
+    if (ret != C_KZG_OK) goto out_error;
+    ret = fft_g1(out->g1_values, g1_projective, true, n1, out->fs);
+    if (ret != C_KZG_OK) goto out_error;
+    ret = bit_reversal_permutation(out->g1_values, sizeof(g1_t), n1);
+    if (ret != C_KZG_OK) goto out_error;
+    */
     // TODO - return the KZGSettings:
     // convert vector of g1 and g2 point to lambdaworks format
-    Ok(0)
+    Ok(settings)
 }
 
 #[cfg(test)]
@@ -106,92 +137,3 @@ mod tests {
         load_trusted_setup_file("test/trusted_setup_4.txt").unwrap();
     }
 }
-/*
-C_KZG_RET load_trusted_setup(
-    KZGSettings *out,
-    const uint8_t *g1_bytes, /* n1 * 48 bytes */
-    size_t n1,
-    const uint8_t *g2_bytes, /* n2 * 96 bytes */
-    size_t n2
-);
-
-
-/**
- * Load trusted setup into a KZGSettings.
- *
- * @remark Free after use with free_trusted_setup().
- *
- * @param[out] out      Pointer to the stored trusted setup data
- * @param[in]  g1_bytes Array of G1 points
- * @param[in]  n1       Number of `g1` points in g1_bytes
- * @param[in]  g2_bytes Array of G2 points
- * @param[in]  n2       Number of `g2` points in g2_bytes
- */
-C_KZG_RET load_trusted_setup(
-    KZGSettings *out,
-    const uint8_t *g1_bytes,
-    size_t n1,
-    const uint8_t *g2_bytes,
-    size_t n2
-) {
-    uint64_t i;
-    blst_p2_affine g2_affine;
-    g1_t *g1_projective = NULL;
-    C_KZG_RET ret;
-
-    out->fs = NULL;
-    out->g1_values = NULL;
-    out->g2_values = NULL;
-
-    /* Sanity check in case this is called directly */
-    CHECK(n1 == TRUSTED_SETUP_NUM_G1_POINTS);
-    CHECK(n2 == TRUSTED_SETUP_NUM_G2_POINTS);
-
-    /* Allocate all of our arrays */
-    ret = new_g1_array(&out->g1_values, n1);
-    if (ret != C_KZG_OK) goto out_error;
-    ret = new_g2_array(&out->g2_values, n2);
-    if (ret != C_KZG_OK) goto out_error;
-    ret = new_g1_array(&g1_projective, n1);
-    if (ret != C_KZG_OK) goto out_error;
-
-    /* Convert all g1 bytes to g1 points */
-    for (i = 0; i < n1; i++) {
-        ret = validate_kzg_g1(
-            &g1_projective[i], (Bytes48 *)&g1_bytes[BYTES_PER_G1 * i]
-        );
-        if (ret != C_KZG_OK) goto out_error;
-    }
-
-    /* Convert all g2 bytes to g2 points */
-    for (i = 0; i < n2; i++) {
-        blst_p2_uncompress(&g2_affine, &g2_bytes[BYTES_PER_G2 * i]);
-        blst_p2_from_affine(&out->g2_values[i], &g2_affine);
-    }
-
-    /* It's the smallest power of 2 >= n1 */
-    unsigned int max_scale = 0;
-    while ((1ULL << max_scale) < n1)
-        max_scale++;
-
-    /* Initialize the KZGSettings struct */
-    ret = c_kzg_malloc((void **)&out->fs, sizeof(FFTSettings));
-    if (ret != C_KZG_OK) goto out_error;
-    ret = new_fft_settings(out->fs, max_scale);
-    if (ret != C_KZG_OK) goto out_error;
-    ret = fft_g1(out->g1_values, g1_projective, true, n1, out->fs);
-    if (ret != C_KZG_OK) goto out_error;
-    ret = bit_reversal_permutation(out->g1_values, sizeof(g1_t), n1);
-    if (ret != C_KZG_OK) goto out_error;
-
-    goto out_success;
-
-out_error:
-    c_kzg_free(out->fs);
-    c_kzg_free(out->g1_values);
-    c_kzg_free(out->g2_values);
-out_success:
-    c_kzg_free(g1_projective);
-    return ret;
-}
-*/
