@@ -719,10 +719,49 @@ pub fn kzgsettings_to_structured_reference_string(
         })
         .collect();
 
-    let g2_points = Vec::new();
-    StructuredReferenceString::<G1, G2Point>::new(&g1_points, &g2_points);
+    let g2_points: Vec<G2Point> = g2_points_slice
+        .iter()
+        .map(|point| {
+            let [x0, x1] = point.x.fp;
+            let [y0, y1] = point.y.fp;
+            //let z = point.z;
 
-    todo!()
+            let x0_field = BLS12381FieldElement::from_bytes_be(
+                &x0.l
+                    .iter()
+                    .flat_map(|e| e.to_be_bytes())
+                    .collect::<Vec<u8>>(),
+            )
+            .unwrap();
+            let x1_field = BLS12381FieldElement::from_bytes_be(
+                &x1.l
+                    .iter()
+                    .flat_map(|e| e.to_be_bytes())
+                    .collect::<Vec<u8>>(),
+            )
+            .unwrap();
+            let y0_field = BLS12381FieldElement::from_bytes_be(
+                &y0.l
+                    .iter()
+                    .flat_map(|e| e.to_be_bytes())
+                    .collect::<Vec<u8>>(),
+            )
+            .unwrap();
+            let y1_field = BLS12381FieldElement::from_bytes_be(
+                &y1.l
+                    .iter()
+                    .flat_map(|e| e.to_be_bytes())
+                    .collect::<Vec<u8>>(),
+            )
+            .unwrap();
+
+            let x = BLS12381TwistCurveFieldElement::new([x0_field, x1_field]);
+            let y = BLS12381TwistCurveFieldElement::new([y0_field, y1_field]);
+            G2Point::from_affine(x, y).unwrap()
+        })
+        .collect();
+
+    StructuredReferenceString::<G1, G2Point>::new(&g1_points, &g2_points)
 }
 
 #[cfg(test)]
