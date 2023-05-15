@@ -13,7 +13,7 @@ use std::{marker::PhantomData, mem};
 #[derive(PartialEq, Clone, Debug)]
 pub struct StructuredReferenceString<G1Point, G2Point> {
     pub powers_main_group: Vec<G1Point>,
-    pub powers_secondary_group: [G2Point; 2],
+    pub powers_secondary_group: Vec<G2Point>,
 }
 
 impl<G1Point, G2Point> StructuredReferenceString<G1Point, G2Point>
@@ -22,10 +22,10 @@ where
     G2Point: IsGroup,
 {
     #[allow(unused)]
-    pub fn new(powers_main_group: &[G1Point], powers_secondary_group: &[G2Point; 2]) -> Self {
+    pub fn new(powers_main_group: &[G1Point], powers_secondary_group: &[G2Point]) -> Self {
         Self {
             powers_main_group: powers_main_group.into(),
-            powers_secondary_group: powers_secondary_group.clone(),
+            powers_secondary_group: powers_secondary_group.into(),
         }
     }
 }
