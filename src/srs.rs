@@ -1,5 +1,5 @@
 use crate::compress::{decompress_g1_point, decompress_g2_point};
-use crate::{g1_t, g2_t, G2Point, KZGSettings, G1};
+use crate::{blst_fp, blst_fp2, blst_p1, blst_p2, G2Point, KZGSettings, G1};
 use core::ptr::null_mut;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Lines};
@@ -94,13 +94,69 @@ pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
             break;
         }
     }
-    let mut zzzz: Vec<g1_t> = Vec::new();
-    let g1_values = zzzz.as_mut_ptr();
-    std::mem::forget(zzzz);
 
-    let mut zzzz2: Vec<g2_t> = Vec::new();
-    let g2_values = zzzz2.as_mut_ptr();
-    std::mem::forget(zzzz2);
+    let mut g1_values_vec: Vec<blst_p1> = g1_points
+        .iter()
+        .map(|v| blst_p1 {
+            x: blst_fp {
+                l: v.x().representative().limbs,
+            },
+            y: blst_fp {
+                l: v.y().representative().limbs,
+            },
+            z: blst_fp {
+                l: v.z().representative().limbs,
+            },
+        })
+        .collect();
+    let g1_values = g1_values_vec.as_mut_ptr();
+    std::mem::forget(g1_values_vec);
+
+    let mut g2_values_vec: Vec<blst_p2> = g2_points
+        .iter()
+        .map(|v| {
+            let vx = v.to_affine().x().value().clone();
+            let x = blst_fp2 {
+                fp: [
+                    blst_fp {
+                        l: vx[0].representative().limbs,
+                    },
+                    blst_fp {
+                        l: vx[1].representative().limbs,
+                    },
+                ],
+            };
+
+            let vy = v.to_affine().y().value().clone();
+            let y = blst_fp2 {
+                fp: [
+                    blst_fp {
+                        l: vy[0].representative().limbs,
+                    },
+                    blst_fp {
+                        l: vy[1].representative().limbs,
+                    },
+                ],
+            };
+
+            let vz = v.to_affine().z().value().clone();
+            let z = blst_fp2 {
+                fp: [
+                    blst_fp {
+                        l: vz[0].representative().limbs,
+                    },
+                    blst_fp {
+                        l: vz[1].representative().limbs,
+                    },
+                ],
+            };
+
+            blst_p2 { x, y, z }
+        })
+        .collect();
+
+    let g2_values = g2_values_vec.as_mut_ptr();
+    std::mem::forget(g2_values_vec);
 
     let settings = KZGSettings {
         fs: null_mut(),
