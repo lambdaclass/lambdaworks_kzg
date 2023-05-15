@@ -775,12 +775,13 @@ mod tests {
         cyclic_group::IsGroup, field::element::FieldElement, polynomial::Polynomial,
         traits::ByteConversion,
     };
-    use crate::srs::load_trusted_setup_file_to_g1_points_and_g2_points;
+    use crate::srs::{load_trusted_setup_file, load_trusted_setup_file_to_g1_points_and_g2_points};
     use crate::utils::polynomial_to_blob_with_size;
     use crate::{
-        blst_fr, blst_p1, blst_p2, compute_kzg_proof, fr_t, verify_blob_kzg_proof_batch,
-        verify_kzg_proof, Blob, Bytes32, Bytes48, FFTSettings, FrElement, G1Point, KZGProof,
-        KZGSettings, BYTES_PER_BLOB, C_KZG_RET, FE,
+        blst_fr, blst_p1, blst_p2, compute_kzg_proof, fr_t,
+        kzgsettings_to_structured_reference_string, verify_blob_kzg_proof_batch, verify_kzg_proof,
+        Blob, Bytes32, Bytes48, FFTSettings, FrElement, G1Point, KZGProof, KZGSettings,
+        BYTES_PER_BLOB, C_KZG_RET, FE,
     };
 
     #[test]
@@ -880,10 +881,36 @@ mod tests {
     }
 
     #[test]
+    fn short_test_compress_and_decompress_point() {
+        let line = "8d0c6eeadd3f8529d67246f77404a4ac2d9d7fd7d50cf103d3e6abb9003e5e36d8f322663ebced6707a7f46d97b7566d";
+        let bytes = hex::decode(line).unwrap();
+        let mut input_bytes: [u8; 48] = bytes.try_into().unwrap();
+        let point = decompress_g1_point(&mut input_bytes).unwrap();
+        let compressed = compress_g1_point(&point).unwrap();
+        let hex_string = hex::encode(compressed);
+
+        println!("point: {point:?}");
+        assert_eq!("8d0c6eeadd3f8529d67246f77404a4ac2d9d7fd7d50cf103d3e6abb9003e5e36d8f322663ebced6707a7f46d97b7566d", &hex_string);
+    }
+
+    #[test]
     fn test_read_srs() {
         let (g1_points, g2_points) =
-            load_trusted_setup_file_to_g1_points_and_g2_points("test/trusted_setup_4.txt").unwrap();
+            load_trusted_setup_file_to_g1_points_and_g2_points("test/trusted_setup.txt").unwrap();
 
-        let settings = super::vecs_to_structured_reference_string(&g1_points, &g2_points);
+        let g = g1_points[0].clone();
+        let x_g = g.x().to_bytes_be();
+        let compressed = compress_g1_point(&g).unwrap();
+        let hex_string = hex::encode(compressed);
+
+        assert_eq!(hex_string, 
+            "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
+
+        let srs_from_file = super::vecs_to_structured_reference_string(&g1_points, &g2_points);
+        let s = load_trusted_setup_file("test/trusted_setup.txt").unwrap();
+
+        let srs = kzgsettings_to_structured_reference_string(&s);
+
+        assert_eq!(srs_from_file, srs);
     }
 }
