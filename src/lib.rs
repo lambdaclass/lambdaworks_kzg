@@ -16,7 +16,9 @@ pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::defau
 use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::field::extensions::quadratic::QuadraticExtensionField;
-use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
+use commitments::{
+    kzg::KateZaveruchaGoldberg, kzg::StructuredReferenceString, traits::IsCommitmentScheme,
+};
 use core::ptr::null_mut;
 use math::polynomial::Polynomial;
 use math::{
@@ -676,6 +678,13 @@ C_KZG_RET load_trusted_setup(
     size_t n2
 );
 */
+
+pub fn kzgsettings_to_structured_reference_string(
+    g1_points: &[G1],
+    g2_points: &[G2Point],
+) -> StructuredReferenceString<G1, G2Point> {
+    StructuredReferenceString::<G1, G2Point>::new(g1_points, g2_points)
+}
 
 #[cfg(test)]
 mod tests {
