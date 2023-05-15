@@ -889,7 +889,6 @@ mod tests {
         let compressed = compress_g1_point(&point).unwrap();
         let hex_string = hex::encode(compressed);
 
-        println!("point: {point:?}");
         assert_eq!("8d0c6eeadd3f8529d67246f77404a4ac2d9d7fd7d50cf103d3e6abb9003e5e36d8f322663ebced6707a7f46d97b7566d", &hex_string);
     }
 
