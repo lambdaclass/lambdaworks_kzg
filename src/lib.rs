@@ -4,11 +4,18 @@
 pub mod commitments;
 pub mod compress;
 pub mod math;
+pub mod sqrt;
+pub mod srs;
 pub mod utils;
 
 use crate::compress::{compress_g1_point, decompress_g1_point};
 use crate::math::cyclic_group::IsGroup;
+pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
+    FrConfig, FrElement, FrField, MODULUS,
+};
+use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
+use crate::math::field::extensions::quadratic::QuadraticExtensionField;
 use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
 use math::polynomial::Polynomial;
 use math::{
@@ -25,15 +32,12 @@ use math::{
 };
 use std::marker;
 
+pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
-pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
+pub type G2Point = <BLS12381TwistCurve as IsEllipticCurve>::PointRepresentation;
 pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
-pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
-    FrConfig, FrElement, FrField, MODULUS,
-};
-
-pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
+pub type BLS12381TwistCurveFieldElement = FieldElement<QuadraticExtensionField<LevelOneResidue>>;
 #[allow(clippy::upper_case_acronyms)]
 type FE = FrElement;
 
@@ -70,11 +74,20 @@ pub const BYTES_PER_FIELD_ELEMENT: usize = 32;
 
 pub const FIELD_ELEMENTS_PER_BLOB: usize = 4096;
 
+pub const TRUSTED_SETUP_NUM_G1_POINTS: usize = FIELD_ELEMENTS_PER_BLOB;
+
 /** The number of bytes in a blob. */
 pub const BYTES_PER_BLOB: usize = FIELD_ELEMENTS_PER_BLOB * BYTES_PER_FIELD_ELEMENT;
 
 pub const CHALLENGE_INPUT_SIZE: usize =
     DOMAIN_STR_LENGTH + 16 + BYTES_PER_BLOB + BYTES_PER_COMMITMENT;
+
+pub const BYTES_PER_G1_POINT: usize = 48;
+pub const BYTES_PER_G2_POINT: usize = 96;
+
+/// Number of G2 points required for the kzg trusted setup.
+/// 65 is fixed and is used for providing multiproofs up to 64 field elements.
+pub const NUM_G2_POINTS: usize = 65;
 
 pub type Bytes32 = [u8; 32];
 pub type Bytes48 = [u8; 48];
@@ -626,6 +639,17 @@ fn verify_kzg_proof_batch(
     let kzg = KZG::new(utils::create_srs());
     Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }
+
+/* TODO: implement
+C_KZG_RET load_trusted_setup_file(KZGSettings *out, FILE *in);
+C_KZG_RET load_trusted_setup(
+    KZGSettings *out,
+    const uint8_t *g1_bytes, /* n1 * 48 bytes */
+    size_t n1,
+    const uint8_t *g2_bytes, /* n2 * 96 bytes */
+    size_t n2
+);
+*/
 
 #[cfg(test)]
 mod tests {
