@@ -1,5 +1,5 @@
-use crate::compress::decompress_g1_point;
-use crate::G1;
+use crate::compress::{decompress_g1_point, decompress_g2_point};
+use crate::{G2Point, G1};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Lines};
 use std::path::Path;
@@ -32,16 +32,11 @@ where
 pub fn load_trusted_setup_file(path: &str) -> io::Result<u8> {
     let mut lines = read_lines(path)?;
 
-    let /*mut*/ g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
-    let /*mut*/ g1_points: Vec<G1> = Vec::new();
     let mut g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
     let mut g1_points: Vec<G1> = Vec::new();
-    /*
-    int num_matches;
-    uint64_t i;
-    uint8_t g1_bytes[TRUSTED_SETUP_NUM_G1_POINTS * BYTES_PER_G1];
-    uint8_t g2_bytes[TRUSTED_SETUP_NUM_G2_POINTS * BYTES_PER_G2];
-    */
+
+    let mut g2_bytes: [u8; crate::BYTES_PER_G2_POINT] = [0; crate::BYTES_PER_G2_POINT];
+    let mut g2_points: Vec<G2Point> = Vec::new();
 
     // Read the number of g1 points
     let num_g1_points = lines
@@ -59,73 +54,46 @@ pub fn load_trusted_setup_file(path: &str) -> io::Result<u8> {
             io::ErrorKind::InvalidData,
             "Invalid file format",
         ))??
-        .parse::<u64>()
+        .parse::<usize>()
         .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
     println!("num_g1_points: {num_g1_points}, num_g2_points: {num_g2_points}");
 
+    let num_total_points = num_g1_points + num_g1_points;
+
     // read all g1 points
     for (pos, line) in lines.enumerate() {
-        let Ok(line_string) = line  else {
-            return Err(std::io::ErrorKind::InvalidData.into());
-        };
-        hex::decode_to_slice(line_string, &mut g1_bytes)
-            .map_err(|_| std::io::ErrorKind::InvalidData)?;
+        if pos < num_g1_points {
+            // read g1 point
+            let Ok(line_string) = line  else {
+                return Err(std::io::ErrorKind::InvalidData.into());
+            };
+            hex::decode_to_slice(line_string, &mut g1_bytes)
+                .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
-        let g1_point =
-            decompress_g1_point(&mut g1_bytes).map_err(|_| std::io::ErrorKind::InvalidData)?;
+            let g1_point =
+                decompress_g1_point(&mut g1_bytes).map_err(|_| std::io::ErrorKind::InvalidData)?;
 
-        g1_points.push(g1_point);
+            g1_points.push(g1_point);
+        } else if pos < num_total_points {
+            // read g2 point
+            let Ok(line_string) = line  else {
+                return Err(std::io::ErrorKind::InvalidData.into());
+            };
+            hex::decode_to_slice(line_string, &mut g2_bytes)
+                .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
-        if pos + 1 == num_g1_points {
+            let g2_point =
+                decompress_g2_point(&mut g2_bytes).map_err(|_| std::io::ErrorKind::InvalidData)?;
+
+            g2_points.push(g2_point);
+        } else {
+            // all the points were already parsed
             break;
         }
     }
-
-    // read all g2 points
-    /*for (pos, line) in lines.enumerate() {
-        let Ok(line_string) = line  else {
-            return Err(std::io::ErrorKind::InvalidData.into());
-        };
-        hex::decode_to_slice(line_string, &mut g2_bytes)
-            .map_err(|_| std::io::ErrorKind::InvalidData)?;
-
-
-
-        let g1_point =
-            decompress_g1_point(&mut g1_bytes).map_err(|_| std::io::ErrorKind::InvalidData)?;
-
-        g1_points.push(g1_point);
-
-        if pos + 1 == num_g2_points {
-            break;
-        }
-    }
-    */
-
-    /*
-    // Read all of the g1 points, byte by byte
-    for (i = 0; i < TRUSTED_SETUP_NUM_G1_POINTS * BYTES_PER_G1; i++) {
-        num_matches = fscanf(in, "%2hhx", &g1_bytes[i]);
-        CHECK(num_matches == 1);
-    }
-
-    // Read all of the g2 points, byte by byte
-    for (i = 0; i < TRUSTED_SETUP_NUM_G2_POINTS * BYTES_PER_G2; i++) {
-        num_matches = fscanf(in, "%2hhx", &g2_bytes[i]);
-        CHECK(num_matches == 1);
-    }
-
-    return load_trusted_setup(
-        out,
-        g1_bytes,
-        TRUSTED_SETUP_NUM_G1_POINTS,
-        g2_bytes,
-        TRUSTED_SETUP_NUM_G2_POINTS
-    );
-    */
-
-    //todo!("Implement load_trusted_setup_file")
+    // TODO - return the KZGSettings:
+    // convert vector of g1 and g2 point to lambdaworks format
     Ok(0)
 }
 
