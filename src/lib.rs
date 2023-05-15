@@ -4,12 +4,18 @@
 pub mod commitments;
 pub mod compress;
 pub mod math;
+pub mod sqrt;
 pub mod srs;
 pub mod utils;
 
 use crate::compress::{compress_g1_point, decompress_g1_point};
 use crate::math::cyclic_group::IsGroup;
+pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
+    FrConfig, FrElement, FrField, MODULUS,
+};
+use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
+use crate::math::field::extensions::quadratic::QuadraticExtensionField;
 use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
 use math::polynomial::Polynomial;
 use math::{
@@ -26,18 +32,13 @@ use math::{
 };
 use std::marker;
 
+pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
-//pub type G2Point = ShortWeierstrassProjectivePoint<BLS12381TwistCurve>;
 pub type G2Point = <BLS12381TwistCurve as IsEllipticCurve>::PointRepresentation;
 pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
-//pub type BLS12381TwistCurveFieldElement = FieldElement<BLS12381TwistCurve>;
-pub type BLS12381TwistCurveFieldElement = FieldElement<crate::math::field::extensions::quadratic::QuadraticExtensionField<crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue>>;
-pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
-    FrConfig, FrElement, FrField, MODULUS,
-};
-
-pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
+pub type QFE = FieldElement<QuadraticExtensionField<LevelOneResidue>>;
+pub type BLS12381TwistCurveFieldElement = FieldElement<QuadraticExtensionField<LevelOneResidue>>;
 #[allow(clippy::upper_case_acronyms)]
 type FE = FrElement;
 
