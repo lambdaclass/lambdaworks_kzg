@@ -16,22 +16,9 @@ where
     Ok(BufReader::new(file).lines())
 }
 
-/// Load trusted setup from a file.
-///
-/// The file format is `n1 n2 g1_1 g1_2 ... g1_n1 g2_1 ... g2_n2` where
-/// the first two numbers are in decimal and the remainder are hexstrings
-/// and any whitespace can be used as separators.
-///
-/// See also `load_trusted_setup`.
-///
-/// # Arguments
-///
-/// * `path` - Path to the file containing the trusted setup
-///
-/// # Returns
-///
-/// * `KZGSettings` - The loaded trusted setup data
-pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
+pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
+    path: &str,
+) -> io::Result<(Vec<G1>, Vec<G2Point>)> {
     let mut lines = read_lines(path)?;
 
     let mut g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
@@ -92,6 +79,27 @@ pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
             break;
         }
     }
+
+    Ok((g1_points, g2_points))
+}
+
+/// Load trusted setup from a file.
+///
+/// The file format is `n1 n2 g1_1 g1_2 ... g1_n1 g2_1 ... g2_n2` where
+/// the first two numbers are in decimal and the remainder are hexstrings
+/// and any whitespace can be used as separators.
+///
+/// See also `load_trusted_setup`.
+///
+/// # Arguments
+///
+/// * `path` - Path to the file containing the trusted setup
+///
+/// # Returns
+///
+/// * `KZGSettings` - The loaded trusted setup data
+pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
+    let (g1_points, g2_points) = load_trusted_setup_file_to_g1_points_and_g2_points(path)?;
 
     let mut g1_values_vec: Vec<blst_p1> = g1_points
         .iter()
