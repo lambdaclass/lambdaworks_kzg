@@ -265,7 +265,8 @@ pub extern "C" fn blob_to_kzg_commitment(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let kzg = crate::KZG::new(crate::utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let commitment: ShortWeierstrassProjectivePoint<BLS12381Curve> = kzg.commit(&polynomial);
     let Ok(commitment_bytes) = compress_g1_point(&commitment) else {
         return C_KZG_RET::C_KZG_ERROR;
@@ -319,8 +320,8 @@ pub extern "C" fn compute_kzg_proof(
     let fr_y: FE = polynomial.evaluate(&fr_z);
     let y_out_slice: [u8; 32] = fr_y.to_bytes_be().try_into().unwrap();
 
-    // FIXME: We should not use create_src() for this instantiation.
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let proof = kzg.open(&fr_z, &fr_y, &polynomial);
     let Ok(compressed_proof) = compress_g1_point(&proof) else {
         return C_KZG_RET::C_KZG_ERROR;
@@ -362,6 +363,7 @@ pub extern "C" fn compute_blob_kzg_proof(
     let mut commitment_slice = unsafe { *commitment_bytes };
     let input_blob: [u8; BYTES_PER_BLOB] =
         unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
+    let s_struct = unsafe { (*s).clone() };
 
     // Do conversions first to fail fast, compute_challenge is expensive
     let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
@@ -381,7 +383,8 @@ pub extern "C" fn compute_blob_kzg_proof(
     };
 
     let fr_y: FE = polynomial.evaluate(&fr_z);
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let proof = kzg.open(&fr_z, &fr_y, &polynomial);
     let Ok(compressed_proof) = compress_g1_point(&proof) else {
         return C_KZG_RET::C_KZG_ERROR;
@@ -478,8 +481,8 @@ pub extern "C" fn verify_blob_kzg_proof(
 
     let y_fr: FE = polynomial.evaluate(&evaluation_challenge_fr);
 
-    // FIXME: We should not use create_src() for this instantiation.
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let ret = kzg.verify(&evaluation_challenge_fr, &y_fr, &commitment_g1, &proof_g1);
 
     if ret {
@@ -665,8 +668,8 @@ fn verify_kzg_proof_batch(
     // Get c_minus_y_lincomb + proof_z_lincomb
     let rhs_g1 = c_minus_y_lincomb.operate_with(&proof_z_lincomb);
 
-    // FIXME: check this ⚠️ ⚠️ ⚠️
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(s);
+    let kzg = KZG::new(srs);
     Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }
 
