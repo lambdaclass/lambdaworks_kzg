@@ -59,8 +59,6 @@ pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
         .parse::<usize>()
         .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
-    println!("num_g1_points: {num_g1_points}, num_g2_points: {num_g2_points}");
-
     let num_total_points = num_g1_points + num_g2_points;
 
     // read all g1 points
@@ -166,10 +164,6 @@ pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
         _marker2: marker::PhantomData,
         _marker3: marker::PhantomData,
     };
-
-    let len_vec_g1 = g1_points.len();
-    let len_vec_g2 = g2_points.len();
-    println!("len_vec_g1: {len_vec_g1}, len_vec_g2: {len_vec_g2}");
 
     /* TODO: add this to the KZGSettings struct
     ret = new_fft_settings(out->fs, max_scale);
