@@ -14,6 +14,7 @@ pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::defau
     FrConfig, FrElement, FrField, MODULUS,
 };
 use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue;
+use crate::math::elliptic_curve::traits::FromAffine;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::field::extensions::quadratic::QuadraticExtensionField;
 use commitments::{
@@ -88,6 +89,7 @@ pub const CHALLENGE_INPUT_SIZE: usize =
 pub const BYTES_PER_G1_POINT: usize = 48;
 pub const BYTES_PER_G2_POINT: usize = 96;
 
+pub const NUM_G1_POINTS: usize = FIELD_ELEMENTS_PER_BLOB;
 /// Number of G2 points required for the kzg trusted setup.
 /// 65 is fixed and is used for providing multiproofs up to 64 field elements.
 pub const NUM_G2_POINTS: usize = 65;
@@ -108,14 +110,14 @@ pub struct blst_fr {
     l: [limb_t; 256 / 8 / core::mem::size_of::<limb_t>()],
 }
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_fp {
     l: [limb_t; 384 / 8 / core::mem::size_of::<limb_t>()],
 }
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_p1 {
@@ -133,7 +135,7 @@ pub struct blst_p1_affine {
 }
 
 /* 0 is "real" part, 1 is "imaginary" */
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_fp2 {
@@ -150,7 +152,7 @@ pub type g2_t = blst_p2;
 pub type fr_t = blst_fr;
 /**< Internal Fr field element type. */
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_p2 {
@@ -679,11 +681,48 @@ C_KZG_RET load_trusted_setup(
 );
 */
 
-pub fn kzgsettings_to_structured_reference_string(
+pub fn vecs_to_structured_reference_string(
     g1_points: &[G1],
     g2_points: &[G2Point],
 ) -> StructuredReferenceString<G1, G2Point> {
     StructuredReferenceString::<G1, G2Point>::new(g1_points, g2_points)
+}
+
+pub fn kzgsettings_to_structured_reference_string(
+    s: &KZGSettings,
+) -> StructuredReferenceString<G1, G2Point> {
+    let g1_values = s.g1_values;
+    let g2_values = s.g2_values;
+
+    let g1_points_slice: [blst_p1; NUM_G1_POINTS] = unsafe { *g1_values.cast() };
+    let g2_points_slice: [blst_p2; NUM_G2_POINTS] = unsafe { *g2_values.cast() };
+
+    let g1_points: Vec<G1> = g1_points_slice
+        .iter()
+        .map(|point| {
+            let x_field = point
+                .x
+                .l
+                .iter()
+                .flat_map(|e| e.to_be_bytes())
+                .collect::<Vec<u8>>();
+            let x = BLS12381FieldElement::from_bytes_be(&x_field).unwrap();
+
+            let y_field = point
+                .y
+                .l
+                .iter()
+                .flat_map(|e| e.to_be_bytes())
+                .collect::<Vec<u8>>();
+            let y = BLS12381FieldElement::from_bytes_be(&y_field).unwrap();
+            G1::from_affine(x, y).unwrap()
+        })
+        .collect();
+
+    let g2_points = Vec::new();
+    StructuredReferenceString::<G1, G2Point>::new(&g1_points, &g2_points);
+
+    todo!()
 }
 
 #[cfg(test)]
@@ -694,6 +733,7 @@ mod tests {
         cyclic_group::IsGroup, field::element::FieldElement, polynomial::Polynomial,
         traits::ByteConversion,
     };
+    use crate::srs::load_trusted_setup_file_to_g1_points_and_g2_points;
     use crate::utils::polynomial_to_blob_with_size;
     use crate::{
         blst_fr, blst_p1, blst_p2, compute_kzg_proof, fr_t, verify_blob_kzg_proof_batch,
@@ -795,5 +835,13 @@ mod tests {
             1,
             &s as *const KZGSettings,
         );
+    }
+
+    #[test]
+    fn test_read_srs() {
+        let (g1_points, g2_points) =
+            load_trusted_setup_file_to_g1_points_and_g2_points("test/trusted_setup_4.txt").unwrap();
+
+        let settings = super::vecs_to_structured_reference_string(&g1_points, &g2_points);
     }
 }
