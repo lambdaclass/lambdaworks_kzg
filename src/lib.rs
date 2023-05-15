@@ -17,6 +17,7 @@ use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_ext
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::field::extensions::quadratic::QuadraticExtensionField;
 use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
+use core::ptr::null_mut;
 use math::polynomial::Polynomial;
 use math::{
     elliptic_curve::short_weierstrass::{
@@ -196,6 +197,18 @@ pub struct FFTSettings<'a> {
     _marker: marker::PhantomData<&'a *mut fr_t>,
 }
 
+impl<'a> Default for FFTSettings<'a> {
+    fn default() -> Self {
+        Self {
+            max_width: 0,
+            expanded_roots_of_unity: null_mut(),
+            reverse_roots_of_unity: null_mut(),
+            roots_of_unity: null_mut(),
+            _marker: marker::PhantomData,
+        }
+    }
+}
+
 #[derive(Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -212,6 +225,19 @@ pub struct KZGSettings<'a> {
     _marker: marker::PhantomData<&'a *mut FFTSettings<'a>>,
     _marker2: marker::PhantomData<&'a *mut g1_t>,
     _marker3: marker::PhantomData<&'a *mut g2_t>,
+}
+
+impl<'a> Default for KZGSettings<'a> {
+    fn default() -> Self {
+        Self {
+            fs: null_mut(),
+            g1_values: null_mut(),
+            g2_values: null_mut(),
+            _marker: marker::PhantomData,
+            _marker2: marker::PhantomData,
+            _marker3: marker::PhantomData,
+        }
+    }
 }
 
 #[no_mangle]
