@@ -2,9 +2,9 @@ use crate::math::cyclic_group::IsGroup;
 use crate::math::elliptic_curve::traits::FromAffine;
 use crate::math::field::extensions::quadratic::QuadraticExtensionFieldElement;
 use crate::math::{errors::ByteConversionError, traits::ByteConversion};
+use crate::BLS12381TwistCurveFieldElement;
 use crate::G1Point;
 use crate::MODULUS;
-use crate::QFE;
 use crate::{BLS12381FieldElement, G2Point};
 use std::cmp::Ordering;
 use std::ops::Neg;
@@ -90,7 +90,7 @@ pub fn decompress_g2_point(input_bytes: &mut [u8; 96]) -> Result<G2Point, ByteCo
 
     let x0 = BLS12381FieldElement::from_bytes_be(input0).unwrap();
     let x1 = BLS12381FieldElement::from_bytes_be(input1).unwrap();
-    let x: QFE = QuadraticExtensionFieldElement::new([x0, x1]);
+    let x: BLS12381TwistCurveFieldElement = QuadraticExtensionFieldElement::new([x0, x1]);
 
     // TODO: calculate sqrt
 

@@ -1,5 +1,5 @@
 use crate::compress::decompress_g1_point;
-use crate::{KZGSettings, G1};
+use crate::G1;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Lines};
 use std::path::Path;
@@ -32,8 +32,8 @@ where
 pub fn load_trusted_setup_file(path: &str) -> io::Result<u8> {
     let mut lines = read_lines(path)?;
 
-    let mut g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
-    let mut g1_points: Vec<G1> = Vec::new();
+    let /*mut*/ g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
+    let /*mut*/ g1_points: Vec<G1> = Vec::new();
     let mut g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
     let mut g1_points: Vec<G1> = Vec::new();
     /*
