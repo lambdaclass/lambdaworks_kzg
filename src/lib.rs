@@ -8,7 +8,7 @@ pub mod sqrt;
 pub mod srs;
 pub mod utils;
 
-use crate::compress::{compress_g1_point, decompress_g1_point};
+use crate::compress::{compress_g1_point, decompress_g1_point, decompress_g2_point};
 use crate::math::cyclic_group::IsGroup;
 pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
     FrConfig, FrElement, FrField, MODULUS,
@@ -32,7 +32,7 @@ use math::{
     msm::g1_lincomb,
     traits::ByteConversion,
 };
-use srs::kzgsettings_to_structured_reference_string;
+use srs::{g1_point_to_blst_p1, g2_point_to_blst_p2, kzgsettings_to_structured_reference_string};
 use std::marker;
 
 pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
@@ -672,7 +672,20 @@ fn verify_kzg_proof_batch(
     Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }
 
-// TODO: implement
+/// Load trusted setup into a KZGSettings.
+///
+/// # Remark
+///
+/// Free after use with free_trusted_setup().
+///
+/// # Params
+///
+/// * `out` - Pointer to the stored trusted setup data
+/// * `g1_bytes` - Array of G1 points
+/// * `n1` - Number of `g1` points in g1_bytes
+/// * `g2_bytes` - Array of G2 points
+/// * `n2` - Number of `g2` points in g2_bytes
+///
 #[no_mangle]
 pub extern "C" fn load_trusted_setup(
     out: *mut KZGSettings,
@@ -681,7 +694,65 @@ pub extern "C" fn load_trusted_setup(
     g2_bytes: *const u8, /* n2 * 96 bytes */
     n2: usize,
 ) -> C_KZG_RET {
-    todo!()
+    if n1 != TRUSTED_SETUP_NUM_G1_POINTS || n2 != NUM_G2_POINTS {
+        return C_KZG_RET::C_KZG_BADARGS;
+    }
+    let b1_bytes_slice: &[[u8; 48]] =
+        unsafe { std::slice::from_raw_parts(g1_bytes as *const [u8; 48], n1) };
+    let b2_bytes_slice: &[[u8; 96]] =
+        unsafe { std::slice::from_raw_parts(g2_bytes as *const [u8; 96], n2) };
+
+    let mut g1_values_vec: Vec<g1_t> = Vec::with_capacity(n1);
+    let mut g2_values_vec: Vec<g2_t> = Vec::with_capacity(n2);
+
+    // Convert all g1 bytes to g1 points
+    for item in b1_bytes_slice.iter().take(n1) {
+        let ret = validate_kzg_g1(&mut item.clone()).unwrap();
+        g1_values_vec.push(ret);
+    }
+
+    // Convert all g2 bytes to g2 points
+    for item in b2_bytes_slice.iter().take(n2) {
+        let ret = blst_p2_uncompress(&mut item.clone()).unwrap();
+        g2_values_vec.push(ret);
+    }
+    // It's the smallest power of 2 >= n1
+    let mut max_scale: i32 = 0;
+    while (1 << max_scale) < n1 {
+        max_scale += 1;
+    }
+
+    let g1_values = g1_values_vec.as_mut_ptr();
+    std::mem::forget(g1_values_vec);
+
+    let g2_values = g2_values_vec.as_mut_ptr();
+    std::mem::forget(g2_values_vec);
+
+    let settings = KZGSettings {
+        fs: null_mut(),
+        g1_values,
+        g2_values,
+        _marker: marker::PhantomData,
+        _marker2: marker::PhantomData,
+        _marker3: marker::PhantomData,
+    };
+
+    /*
+    // Initialize the KZGSettings struct
+    ret = c_kzg_malloc((void **)&out->fs, sizeof(FFTSettings));
+    if (ret != C_KZG_OK) goto out_error;
+    ret = new_fft_settings(out->fs, max_scale);
+    if (ret != C_KZG_OK) goto out_error;
+    ret = fft_g1(out->g1_values, g1_projective, true, n1, out->fs);
+    if (ret != C_KZG_OK) goto out_error;
+    ret = bit_reversal_permutation(out->g1_values, sizeof(g1_t), n1);
+    if (ret != C_KZG_OK) goto out_error;
+    */
+
+    unsafe {
+        std::ptr::copy(&settings, out as *mut KZGSettings, 1);
+    }
+    C_KZG_RET::C_KZG_OK
 }
 
 // TODO: implement
@@ -694,6 +765,35 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
 #[no_mangle]
 pub extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
     todo!()
+}
+
+/// Perform BLS validation required by the types KZGProof and KZGCommitment.
+///
+/// # Remarks
+///
+/// This function deviates from the spec because it returns (via an
+///     output argument) the g1 point. This way is more efficient (faster)
+///     but the function name is a bit misleading.
+///
+/// # Parameters
+///
+/// * `out `- out The output g1 point
+/// * `in` - b   The proof/commitment bytes
+///
+fn validate_kzg_g1(b_slice: &mut [u8; 48]) -> Result<g1_t, C_KZG_RET> {
+    let Ok(point) = decompress_g1_point(b_slice) else {
+        return Err(C_KZG_RET::C_KZG_ERROR);
+    };
+
+    Ok(g1_point_to_blst_p1(&point))
+}
+
+fn blst_p2_uncompress(b_slice: &mut [u8; 96]) -> Result<g2_t, C_KZG_RET> {
+    let Ok(point) = decompress_g2_point(b_slice) else {
+        return Err(C_KZG_RET::C_KZG_ERROR);
+    };
+
+    Ok(g2_point_to_blst_p2(&point))
 }
 
 #[cfg(test)]

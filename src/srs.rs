@@ -1,5 +1,6 @@
 use crate::commitments::kzg::StructuredReferenceString;
 use crate::compress::{decompress_g1_point, decompress_g2_point};
+use crate::math::cyclic_group::IsGroup;
 use crate::math::{elliptic_curve::traits::FromAffine, traits::ByteConversion};
 use crate::{
     blst_fp, blst_fp2, blst_p1, blst_p2, BLS12381FieldElement, BLS12381TwistCurveFieldElement,
@@ -106,65 +107,11 @@ pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
 pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
     let (g1_points, g2_points) = load_trusted_setup_file_to_g1_points_and_g2_points(path)?;
 
-    let mut g1_values_vec: Vec<blst_p1> = g1_points
-        .iter()
-        .map(|v| blst_p1 {
-            x: blst_fp {
-                l: v.x().representative().limbs,
-            },
-            y: blst_fp {
-                l: v.y().representative().limbs,
-            },
-            z: blst_fp {
-                l: v.z().representative().limbs,
-            },
-        })
-        .collect();
+    let mut g1_values_vec: Vec<blst_p1> = g1_points.iter().map(g1_point_to_blst_p1).collect();
     let g1_values = g1_values_vec.as_mut_ptr();
     std::mem::forget(g1_values_vec);
 
-    let mut g2_values_vec: Vec<blst_p2> = g2_points
-        .iter()
-        .map(|v| {
-            let vx = v.to_affine().x().value().clone();
-            let x = blst_fp2 {
-                fp: [
-                    blst_fp {
-                        l: vx[0].representative().limbs,
-                    },
-                    blst_fp {
-                        l: vx[1].representative().limbs,
-                    },
-                ],
-            };
-
-            let vy = v.to_affine().y().value().clone();
-            let y = blst_fp2 {
-                fp: [
-                    blst_fp {
-                        l: vy[0].representative().limbs,
-                    },
-                    blst_fp {
-                        l: vy[1].representative().limbs,
-                    },
-                ],
-            };
-
-            let vz = v.to_affine().z().value().clone();
-            let z = blst_fp2 {
-                fp: [
-                    blst_fp {
-                        l: vz[0].representative().limbs,
-                    },
-                    blst_fp {
-                        l: vz[1].representative().limbs,
-                    },
-                ],
-            };
-
-            blst_p2 { x, y, z }
-        })
-        .collect();
+    let mut g2_values_vec: Vec<blst_p2> = g2_points.iter().map(g2_point_to_blst_p2).collect();
 
     let g2_values = g2_values_vec.as_mut_ptr();
     std::mem::forget(g2_values_vec);
@@ -189,6 +136,70 @@ pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
     // TODO - return the KZGSettings:
     // convert vector of g1 and g2 point to lambdaworks format
     Ok(settings)
+}
+
+pub fn g1_point_to_blst_p1(v: &G1) -> blst_p1 {
+    if v.is_neutral_element() {
+        return blst_p1 {
+            x: blst_fp { l: [0; 6] },
+            y: blst_fp { l: [0; 6] },
+            z: blst_fp {
+                l: [0, 0, 0, 0, 0, 1],
+            },
+        };
+    }
+
+    blst_p1 {
+        x: blst_fp {
+            l: v.x().representative().limbs,
+        },
+        y: blst_fp {
+            l: v.y().representative().limbs,
+        },
+        z: blst_fp {
+            l: v.z().representative().limbs,
+        },
+    }
+}
+
+pub fn g2_point_to_blst_p2(v: &G2Point) -> blst_p2 {
+    let vx = v.to_affine().x().value().clone();
+    let x = blst_fp2 {
+        fp: [
+            blst_fp {
+                l: vx[0].representative().limbs,
+            },
+            blst_fp {
+                l: vx[1].representative().limbs,
+            },
+        ],
+    };
+
+    let vy = v.to_affine().y().value().clone();
+    let y = blst_fp2 {
+        fp: [
+            blst_fp {
+                l: vy[0].representative().limbs,
+            },
+            blst_fp {
+                l: vy[1].representative().limbs,
+            },
+        ],
+    };
+
+    let vz = v.to_affine().z().value().clone();
+    let z = blst_fp2 {
+        fp: [
+            blst_fp {
+                l: vz[0].representative().limbs,
+            },
+            blst_fp {
+                l: vz[1].representative().limbs,
+            },
+        ],
+    };
+
+    blst_p2 { x, y, z }
 }
 
 pub fn vecs_to_structured_reference_string(
