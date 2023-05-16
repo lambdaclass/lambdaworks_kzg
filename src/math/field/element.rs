@@ -1,3 +1,4 @@
+use crate::math::errors::CreationError;
 use crate::math::field::traits::IsField;
 use crate::math::unsigned_integer::element::UnsignedInteger;
 use crate::math::unsigned_integer::montgomery::MontgomeryAlgorithms;
@@ -357,10 +358,89 @@ where
     }
 }
 
+#[derive(PartialEq)]
+pub enum LegendreSymbol {
+    MinusOne,
+    Zero,
+    One,
+}
+
 impl<F: IsPrimeField> FieldElement<F> {
     // Returns the representative of the value stored
     pub fn representative(&self) -> F::RepresentativeType {
         F::representative(self.value())
+    }
+
+    pub fn is_even(&self) -> bool {
+        self.representative() & 1.into() == 0.into()
+    }
+
+    pub fn legendre_symbol(&self) -> LegendreSymbol {
+        let mod_minus_one: FieldElement<F> = Self::zero() - Self::one();
+        let symbol = self.pow((mod_minus_one / FieldElement::from(2)).representative());
+
+        match symbol {
+            x if x == Self::zero() => LegendreSymbol::Zero,
+            x if x == Self::one() => LegendreSymbol::One,
+            _ => LegendreSymbol::MinusOne,
+        }
+    }
+}
+
+impl<F: IsPrimeField> FieldElement<F> {
+    // Returns the two square roots of `self` if it exists
+    // `None` if it doesn't
+    pub fn sqrt(&self) -> Option<(Self, Self)> {
+        match self.legendre_symbol() {
+            LegendreSymbol::Zero => return Some((Self::zero(), Self::zero())), // self is 0
+            LegendreSymbol::MinusOne => return None, // self is quadratic non-residue
+            LegendreSymbol::One => (),
+        };
+
+        let (zero, one, two) = (Self::zero(), Self::one(), Self::from(2));
+
+        let mut q = Self::zero() - &one;
+        let mut s = Self::zero();
+
+        while q.is_even() {
+            s = s + &one;
+            q = q / &two;
+        }
+
+        let mut c = {
+            // Calculate a non residue:
+            let mut non_qr = one.clone();
+            while non_qr.legendre_symbol() != LegendreSymbol::MinusOne {
+                non_qr += one.clone();
+            }
+
+            non_qr.pow(q.representative())
+        };
+
+        let mut x = self.pow(((&q + &one) / &two).representative());
+        let mut t = self.pow(q.representative());
+        let mut m = s;
+
+        while t != one {
+            let mut i = zero.clone();
+            let mut e = FieldElement::from(2);
+            while i.representative() < m.representative() {
+                i += FieldElement::one();
+                if t.pow(e.representative()) == one {
+                    break;
+                }
+                e = e * &two;
+            }
+
+            let b = c.pow(two.pow((m - &i - &one).representative()).representative());
+
+            x = x * &b;
+            t = t * &b * &b;
+            c = &b * &b;
+            m = i;
+        }
+
+        Some((x.clone(), Self::zero() - &x))
     }
 }
 
@@ -371,22 +451,8 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value: UnsignedInteger<NUM_LIMBS> = self.representative();
-        let mut limbs_iterator = value.limbs.iter().skip_while(|limb| **limb == 0).peekable();
-
-        if limbs_iterator.peek().is_none() {
-            write!(f, "0x0")?;
-        } else {
-            write!(f, "0x")?;
-            if let Some(most_significant_limb) = limbs_iterator.next() {
-                write!(f, "{:x}", most_significant_limb)?;
-            }
-
-            for limb in limbs_iterator {
-                write!(f, "{:016x}", limb)?;
-            }
-        }
-
-        Ok(())
+        let res = format!("{}", value);
+        write!(f, "{}", res)
     }
 }
 
@@ -394,9 +460,11 @@ impl<M, const NUM_LIMBS: usize> FieldElement<MontgomeryBackendPrimeField<M, NUM_
 where
     M: IsModulus<UnsignedInteger<NUM_LIMBS>> + Clone + Debug,
 {
-    #[allow(unused)]
-    pub const fn from_hex(hex: &str) -> Self {
-        let integer = UnsignedInteger::<NUM_LIMBS>::from(hex);
+    /// Creates a `FieldElement` from a hexstring. It can contain `0x` or not.
+    /// # Panics
+    /// Panics if value is not a hexstring
+    pub const fn from_hex_unchecked(hex: &str) -> Self {
+        let integer = UnsignedInteger::<NUM_LIMBS>::from_hex_unchecked(hex);
         Self {
             value: MontgomeryAlgorithms::cios(
                 &integer,
@@ -406,11 +474,26 @@ where
             ),
         }
     }
+
+    /// Creates a `FieldElement` from a hexstring. It can contain `0x` or not.
+    /// Returns an `CreationError::InvalidHexString`if the value is not a hexstring
+    pub fn from_hex(hex: &str) -> Result<Self, CreationError> {
+        let integer = UnsignedInteger::<NUM_LIMBS>::from_hex(hex)?;
+
+        Ok(Self {
+            value: MontgomeryAlgorithms::cios(
+                &integer,
+                &MontgomeryBackendPrimeField::<M, NUM_LIMBS>::R2,
+                &M::MODULUS,
+                &MontgomeryBackendPrimeField::<M, NUM_LIMBS>::MU,
+            ),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-
+    use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::FrElement;
     use crate::math::field::element::FieldElement;
     use crate::math::field::fields::fft_friendly::stark_252_prime_field::Stark252PrimeField;
     use crate::math::field::test_fields::u64_test_field::U64TestField;
@@ -456,5 +539,69 @@ mod tests {
             format!("{}", some_field_element),
             format!("0x{}{}{}{}", "1", "0".repeat(16), "0".repeat(15), "1")
         );
+    }
+
+    #[test]
+    fn two_is_even() {
+        let two = FieldElement::<Stark252PrimeField>::from(2);
+        assert!(two.is_even());
+    }
+
+    #[test]
+    fn three_is_odd() {
+        let three = FieldElement::<Stark252PrimeField>::from(3);
+        assert!(!three.is_even());
+    }
+
+    #[test]
+    fn one_of_sqrt_roots_for_4_is_2() {
+        #[derive(Clone, Debug)]
+        pub struct FrConfig;
+
+        let input = FrElement::from(4);
+        let sqrt = input.sqrt().unwrap();
+        let result = FrElement::from(2);
+        assert_eq!(sqrt.0, result);
+    }
+
+    #[test]
+    fn one_of_sqrt_roots_for_25_is_5() {
+        let input = FrElement::from(25);
+        let sqrt = input.sqrt().unwrap();
+        let result = FrElement::from(5);
+        assert_eq!(sqrt.1, result);
+    }
+
+    #[test]
+    fn one_of_sqrt_roots_for_25_is_5_in_stark_field() {
+        type FrField = Stark252PrimeField;
+        type FrElement = FieldElement<FrField>;
+
+        let input = FrElement::from(25);
+        let sqrt = input.sqrt().unwrap();
+        let result = FrElement::from(5);
+        assert_eq!(sqrt.0, result);
+    }
+
+    #[test]
+    fn sqrt_roots_for_0_are_0_in_stark_field() {
+        type FrField = Stark252PrimeField;
+        type FrElement = FieldElement<FrField>;
+
+        let input = FrElement::from(0);
+        let sqrt = input.sqrt().unwrap();
+        let result = FrElement::from(0);
+        assert_eq!(sqrt.0, result);
+        assert_eq!(sqrt.1, result);
+    }
+
+    #[test]
+    fn sqrt_of_27_for_stark_field_does_not_exist() {
+        type FrField = Stark252PrimeField;
+        type FrElement = FieldElement<FrField>;
+
+        let input = FrElement::from(27);
+        let sqrt = input.sqrt();
+        assert!(sqrt.is_none());
     }
 }

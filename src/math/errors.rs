@@ -10,4 +10,12 @@ pub enum ByteConversionError {
     InvalidValue,
     #[error("The point is not in the subgroup")]
     PointNotInSubgroup,
+    #[error("Value is not compressed")]
+    ValueNotCompressed,
+}
+
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum CreationError {
+    #[error("String is not an hexstring")]
+    InvalidHexString,
 }
