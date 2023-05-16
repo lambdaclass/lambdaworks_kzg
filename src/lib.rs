@@ -34,7 +34,6 @@ use math::{
 };
 use srs::{g1_point_to_blst_p1, g2_point_to_blst_p2, kzgsettings_to_structured_reference_string};
 
-
 pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G2Point = <BLS12381TwistCurve as IsEllipticCurve>::PointRepresentation;
@@ -786,7 +785,13 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
 // TODO: implement
 #[no_mangle]
 pub extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
-    todo!()
+    let s_struct = unsafe { (*s).clone() };
+    unsafe {
+        libc::free(s_struct.g1_values as *mut libc::c_void);
+        libc::free(s_struct.g2_values as *mut libc::c_void);
+    };
+
+    C_KZG_RET::C_KZG_OK
 }
 
 /// Perform BLS validation required by the types KZGProof and KZGCommitment.
