@@ -20,7 +20,12 @@ const-random = "0.1.15"
 iai = "0.1"
 
 [lib]
-crate-type = ["cdylib", "staticlib"]
+crate-type = ["cdylib", "staticlib", "lib"]
 
 [profile.test]
 opt-level = 3
+
+[[bench]]
+path = "bench/criterion_bench.rs"
+name = "criterion_benchmark"
+harness = false
