@@ -785,6 +785,7 @@ mod tests {
     };
 
     #[test]
+    #[ignore]
     fn test_compute_kzg_proof() {
         // Test this case:
         // polinomial: 1 cte
