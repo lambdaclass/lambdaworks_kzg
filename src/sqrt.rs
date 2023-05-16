@@ -45,8 +45,6 @@ pub fn sqrt_qfe(
                     let two_inv = two.inv();
                     // calculate the square root of alpha
                     let (y_sqrt1, y_sqrt2) = alpha.sqrt()?;
-                    println!("LegendreSymbol::One y_sqrt1: {:?}", y_sqrt1);
-
                     let mut delta = (a.clone() + y_sqrt1) * two_inv.clone();
 
                     let legendre_delta = delta.legendre_symbol();
@@ -54,8 +52,6 @@ pub fn sqrt_qfe(
                         delta = (a + y_sqrt2) * two_inv;
                     };
                     let (x_sqrt_1, x_sqrt_2) = delta.sqrt()?;
-                    println!("LegendreSymbol::One x_sqrt_1: {:?}", x_sqrt_1);
-
                     let x_0 = match (
                         x_sqrt_1.representative().cmp(&x_sqrt_2.representative()),
                         third_bit,

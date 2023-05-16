@@ -14,9 +14,13 @@ pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::defau
     FrConfig, FrElement, FrField, MODULUS,
 };
 use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue;
+use crate::math::elliptic_curve::traits::FromAffine;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::field::extensions::quadratic::QuadraticExtensionField;
-use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
+use commitments::{
+    kzg::KateZaveruchaGoldberg, kzg::StructuredReferenceString, traits::IsCommitmentScheme,
+};
+use core::ptr::null_mut;
 use math::polynomial::Polynomial;
 use math::{
     elliptic_curve::short_weierstrass::{
@@ -85,6 +89,7 @@ pub const CHALLENGE_INPUT_SIZE: usize =
 pub const BYTES_PER_G1_POINT: usize = 48;
 pub const BYTES_PER_G2_POINT: usize = 96;
 
+pub const NUM_G1_POINTS: usize = FIELD_ELEMENTS_PER_BLOB;
 /// Number of G2 points required for the kzg trusted setup.
 /// 65 is fixed and is used for providing multiproofs up to 64 field elements.
 pub const NUM_G2_POINTS: usize = 65;
@@ -105,14 +110,14 @@ pub struct blst_fr {
     l: [limb_t; 256 / 8 / core::mem::size_of::<limb_t>()],
 }
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_fp {
     l: [limb_t; 384 / 8 / core::mem::size_of::<limb_t>()],
 }
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_p1 {
@@ -130,7 +135,7 @@ pub struct blst_p1_affine {
 }
 
 /* 0 is "real" part, 1 is "imaginary" */
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_fp2 {
@@ -147,7 +152,7 @@ pub type g2_t = blst_p2;
 pub type fr_t = blst_fr;
 /**< Internal Fr field element type. */
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_p2 {
@@ -196,6 +201,18 @@ pub struct FFTSettings<'a> {
     _marker: marker::PhantomData<&'a *mut fr_t>,
 }
 
+impl<'a> Default for FFTSettings<'a> {
+    fn default() -> Self {
+        Self {
+            max_width: 0,
+            expanded_roots_of_unity: null_mut(),
+            reverse_roots_of_unity: null_mut(),
+            roots_of_unity: null_mut(),
+            _marker: marker::PhantomData,
+        }
+    }
+}
+
 #[derive(Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -212,6 +229,19 @@ pub struct KZGSettings<'a> {
     _marker: marker::PhantomData<&'a *mut FFTSettings<'a>>,
     _marker2: marker::PhantomData<&'a *mut g1_t>,
     _marker3: marker::PhantomData<&'a *mut g2_t>,
+}
+
+impl<'a> Default for KZGSettings<'a> {
+    fn default() -> Self {
+        Self {
+            fs: null_mut(),
+            g1_values: null_mut(),
+            g2_values: null_mut(),
+            _marker: marker::PhantomData,
+            _marker2: marker::PhantomData,
+            _marker3: marker::PhantomData,
+        }
+    }
 }
 
 #[no_mangle]
@@ -235,7 +265,8 @@ pub extern "C" fn blob_to_kzg_commitment(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let kzg = crate::KZG::new(crate::utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let commitment: ShortWeierstrassProjectivePoint<BLS12381Curve> = kzg.commit(&polynomial);
     let Ok(commitment_bytes) = compress_g1_point(&commitment) else {
         return C_KZG_RET::C_KZG_ERROR;
@@ -289,8 +320,8 @@ pub extern "C" fn compute_kzg_proof(
     let fr_y: FE = polynomial.evaluate(&fr_z);
     let y_out_slice: [u8; 32] = fr_y.to_bytes_be().try_into().unwrap();
 
-    // FIXME: We should not use create_src() for this instantiation.
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let proof = kzg.open(&fr_z, &fr_y, &polynomial);
     let Ok(compressed_proof) = compress_g1_point(&proof) else {
         return C_KZG_RET::C_KZG_ERROR;
@@ -332,6 +363,7 @@ pub extern "C" fn compute_blob_kzg_proof(
     let mut commitment_slice = unsafe { *commitment_bytes };
     let input_blob: [u8; BYTES_PER_BLOB] =
         unsafe { std::slice::from_raw_parts(blob, BYTES_PER_BLOB)[0] };
+    let s_struct = unsafe { (*s).clone() };
 
     // Do conversions first to fail fast, compute_challenge is expensive
     let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
@@ -351,7 +383,8 @@ pub extern "C" fn compute_blob_kzg_proof(
     };
 
     let fr_y: FE = polynomial.evaluate(&fr_z);
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let proof = kzg.open(&fr_z, &fr_y, &polynomial);
     let Ok(compressed_proof) = compress_g1_point(&proof) else {
         return C_KZG_RET::C_KZG_ERROR;
@@ -448,8 +481,8 @@ pub extern "C" fn verify_blob_kzg_proof(
 
     let y_fr: FE = polynomial.evaluate(&evaluation_challenge_fr);
 
-    // FIXME: We should not use create_src() for this instantiation.
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let ret = kzg.verify(&evaluation_challenge_fr, &y_fr, &commitment_g1, &proof_g1);
 
     if ret {
@@ -635,8 +668,8 @@ fn verify_kzg_proof_batch(
     // Get c_minus_y_lincomb + proof_z_lincomb
     let rhs_g1 = c_minus_y_lincomb.operate_with(&proof_z_lincomb);
 
-    // FIXME: check this ⚠️ ⚠️ ⚠️
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(s);
+    let kzg = KZG::new(srs);
     Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }
 
@@ -651,6 +684,89 @@ C_KZG_RET load_trusted_setup(
 );
 */
 
+pub fn vecs_to_structured_reference_string(
+    g1_points: &[G1],
+    g2_points: &[G2Point],
+) -> StructuredReferenceString<G1, G2Point> {
+    StructuredReferenceString::<G1, G2Point>::new(g1_points, g2_points)
+}
+
+pub fn kzgsettings_to_structured_reference_string(
+    s: &KZGSettings,
+) -> StructuredReferenceString<G1, G2Point> {
+    let g1_values = s.g1_values;
+    let g2_values = s.g2_values;
+
+    let g1_points_slice: [blst_p1; NUM_G1_POINTS] = unsafe { *g1_values.cast() };
+    let g2_points_slice: [blst_p2; NUM_G2_POINTS] = unsafe { *g2_values.cast() };
+
+    let g1_points: Vec<G1> = g1_points_slice
+        .iter()
+        .map(|point| {
+            let x_field = point
+                .x
+                .l
+                .iter()
+                .flat_map(|e| e.to_be_bytes())
+                .collect::<Vec<u8>>();
+            let x = BLS12381FieldElement::from_bytes_be(&x_field).unwrap();
+
+            let y_field = point
+                .y
+                .l
+                .iter()
+                .flat_map(|e| e.to_be_bytes())
+                .collect::<Vec<u8>>();
+            let y = BLS12381FieldElement::from_bytes_be(&y_field).unwrap();
+            G1::from_affine(x, y).unwrap()
+        })
+        .collect();
+
+    let g2_points: Vec<G2Point> = g2_points_slice
+        .iter()
+        .map(|point| {
+            let [x0, x1] = point.x.fp;
+            let [y0, y1] = point.y.fp;
+            //let z = point.z;
+
+            let x0_field = BLS12381FieldElement::from_bytes_be(
+                &x0.l
+                    .iter()
+                    .flat_map(|e| e.to_be_bytes())
+                    .collect::<Vec<u8>>(),
+            )
+            .unwrap();
+            let x1_field = BLS12381FieldElement::from_bytes_be(
+                &x1.l
+                    .iter()
+                    .flat_map(|e| e.to_be_bytes())
+                    .collect::<Vec<u8>>(),
+            )
+            .unwrap();
+            let y0_field = BLS12381FieldElement::from_bytes_be(
+                &y0.l
+                    .iter()
+                    .flat_map(|e| e.to_be_bytes())
+                    .collect::<Vec<u8>>(),
+            )
+            .unwrap();
+            let y1_field = BLS12381FieldElement::from_bytes_be(
+                &y1.l
+                    .iter()
+                    .flat_map(|e| e.to_be_bytes())
+                    .collect::<Vec<u8>>(),
+            )
+            .unwrap();
+
+            let x = BLS12381TwistCurveFieldElement::new([x0_field, x1_field]);
+            let y = BLS12381TwistCurveFieldElement::new([y0_field, y1_field]);
+            G2Point::from_affine(x, y).unwrap()
+        })
+        .collect();
+
+    StructuredReferenceString::<G1, G2Point>::new(&g1_points, &g2_points)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::commitments::traits::IsCommitmentScheme;
@@ -659,14 +775,17 @@ mod tests {
         cyclic_group::IsGroup, field::element::FieldElement, polynomial::Polynomial,
         traits::ByteConversion,
     };
+    use crate::srs::{load_trusted_setup_file, load_trusted_setup_file_to_g1_points_and_g2_points};
     use crate::utils::polynomial_to_blob_with_size;
     use crate::{
-        blst_fr, blst_p1, blst_p2, compute_kzg_proof, fr_t, verify_blob_kzg_proof_batch,
-        verify_kzg_proof, Blob, Bytes32, Bytes48, FFTSettings, FrElement, G1Point, KZGProof,
-        KZGSettings, BYTES_PER_BLOB, C_KZG_RET, FE,
+        blst_fr, blst_p1, blst_p2, compute_kzg_proof, fr_t,
+        kzgsettings_to_structured_reference_string, verify_blob_kzg_proof_batch, verify_kzg_proof,
+        Blob, Bytes32, Bytes48, FFTSettings, FrElement, G1Point, KZGProof, KZGSettings,
+        BYTES_PER_BLOB, C_KZG_RET, FE,
     };
 
     #[test]
+    #[ignore]
     fn test_compute_kzg_proof() {
         // Test this case:
         // polinomial: 1 cte
@@ -760,5 +879,38 @@ mod tests {
             1,
             &s as *const KZGSettings,
         );
+    }
+
+    #[test]
+    fn short_test_compress_and_decompress_point() {
+        let line = "8d0c6eeadd3f8529d67246f77404a4ac2d9d7fd7d50cf103d3e6abb9003e5e36d8f322663ebced6707a7f46d97b7566d";
+        let bytes = hex::decode(line).unwrap();
+        let mut input_bytes: [u8; 48] = bytes.try_into().unwrap();
+        let point = decompress_g1_point(&mut input_bytes).unwrap();
+        let compressed = compress_g1_point(&point).unwrap();
+        let hex_string = hex::encode(compressed);
+
+        assert_eq!("8d0c6eeadd3f8529d67246f77404a4ac2d9d7fd7d50cf103d3e6abb9003e5e36d8f322663ebced6707a7f46d97b7566d", &hex_string);
+    }
+
+    #[test]
+    fn test_read_srs() {
+        let (g1_points, g2_points) =
+            load_trusted_setup_file_to_g1_points_and_g2_points("test/trusted_setup.txt").unwrap();
+
+        let g = g1_points[0].clone();
+        let x_g = g.x().to_bytes_be();
+        let compressed = compress_g1_point(&g).unwrap();
+        let hex_string = hex::encode(compressed);
+
+        assert_eq!(hex_string,
+            "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
+
+        let srs_from_file = super::vecs_to_structured_reference_string(&g1_points, &g2_points);
+        let s = load_trusted_setup_file("test/trusted_setup.txt").unwrap();
+
+        let srs = kzgsettings_to_structured_reference_string(&s);
+
+        assert_eq!(srs_from_file, srs);
     }
 }

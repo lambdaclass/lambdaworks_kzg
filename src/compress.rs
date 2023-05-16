@@ -92,14 +92,10 @@ pub fn decompress_g2_point(input_bytes: &mut [u8; 96]) -> Result<G2Point, ByteCo
     let x1 = BLS12381FieldElement::from_bytes_be(input1).unwrap();
     let x: BLS12381TwistCurveFieldElement = QuadraticExtensionFieldElement::new([x0, x1]);
 
-    // TODO: calculate sqrt
-
-    //let y0 = BLS12381FieldElement::from(2u64);
-    //let y1 = BLS12381FieldElement::from(2u64);
-    //let y = QuadraticExtensionFieldElement::new([y0, y1]);
-
-    //let point = G2Point::from_affine(x, y).unwrap();
-    todo!();
+    let b_param_qfe = get_four_qfe();
+    let y = super::sqrt::sqrt_qfe(&(x.pow(3_u64) + b_param_qfe), 0)
+        .ok_or(ByteConversionError::InvalidValue)?;
+    G2Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)
 }
 
 pub fn compress_g1_point(point: &G1Point) -> Result<[u8; 48], Vec<u8>> {
@@ -127,6 +123,12 @@ pub fn compress_g1_point(point: &G1Point) -> Result<[u8; 48], Vec<u8>> {
         x_bytes
     };
     ret_vec.try_into()
+}
+
+fn get_four_qfe() -> BLS12381TwistCurveFieldElement {
+    let b1 = BLS12381FieldElement::from_hex("0x4").unwrap();
+    let b0 = BLS12381FieldElement::from_hex("0x4").unwrap();
+    super::BLS12381TwistCurveFieldElement::new([b0, b1])
 }
 
 #[cfg(test)]
