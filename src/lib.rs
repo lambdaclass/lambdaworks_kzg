@@ -14,12 +14,9 @@ pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::defau
     FrConfig, FrElement, FrField, MODULUS,
 };
 use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue;
-use crate::math::elliptic_curve::traits::FromAffine;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::field::extensions::quadratic::QuadraticExtensionField;
-use commitments::{
-    kzg::KateZaveruchaGoldberg, kzg::StructuredReferenceString, traits::IsCommitmentScheme,
-};
+use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
 use core::ptr::null_mut;
 use math::polynomial::Polynomial;
 use math::{
@@ -34,6 +31,7 @@ use math::{
     msm::g1_lincomb,
     traits::ByteConversion,
 };
+use srs::kzgsettings_to_structured_reference_string;
 use std::marker;
 
 pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
@@ -673,8 +671,8 @@ fn verify_kzg_proof_batch(
     Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }
 
-/* TODO: implement
-C_KZG_RET load_trusted_setup_file(KZGSettings *out, FILE *in);
+// TODO: implement
+/*
 C_KZG_RET load_trusted_setup(
     KZGSettings *out,
     const uint8_t *g1_bytes, /* n1 * 48 bytes */
@@ -682,90 +680,11 @@ C_KZG_RET load_trusted_setup(
     const uint8_t *g2_bytes, /* n2 * 96 bytes */
     size_t n2
 );
+
+C_KZG_RET load_trusted_setup_file(KZGSettings *out, FILE *in);
+
+void free_trusted_setup(KZGSettings *s);
 */
-
-pub fn vecs_to_structured_reference_string(
-    g1_points: &[G1],
-    g2_points: &[G2Point],
-) -> StructuredReferenceString<G1, G2Point> {
-    StructuredReferenceString::<G1, G2Point>::new(g1_points, g2_points)
-}
-
-pub fn kzgsettings_to_structured_reference_string(
-    s: &KZGSettings,
-) -> StructuredReferenceString<G1, G2Point> {
-    let g1_values = s.g1_values;
-    let g2_values = s.g2_values;
-
-    let g1_points_slice: [blst_p1; NUM_G1_POINTS] = unsafe { *g1_values.cast() };
-    let g2_points_slice: [blst_p2; NUM_G2_POINTS] = unsafe { *g2_values.cast() };
-
-    let g1_points: Vec<G1> = g1_points_slice
-        .iter()
-        .map(|point| {
-            let x_field = point
-                .x
-                .l
-                .iter()
-                .flat_map(|e| e.to_be_bytes())
-                .collect::<Vec<u8>>();
-            let x = BLS12381FieldElement::from_bytes_be(&x_field).unwrap();
-
-            let y_field = point
-                .y
-                .l
-                .iter()
-                .flat_map(|e| e.to_be_bytes())
-                .collect::<Vec<u8>>();
-            let y = BLS12381FieldElement::from_bytes_be(&y_field).unwrap();
-            G1::from_affine(x, y).unwrap()
-        })
-        .collect();
-
-    let g2_points: Vec<G2Point> = g2_points_slice
-        .iter()
-        .map(|point| {
-            let [x0, x1] = point.x.fp;
-            let [y0, y1] = point.y.fp;
-            //let z = point.z;
-
-            let x0_field = BLS12381FieldElement::from_bytes_be(
-                &x0.l
-                    .iter()
-                    .flat_map(|e| e.to_be_bytes())
-                    .collect::<Vec<u8>>(),
-            )
-            .unwrap();
-            let x1_field = BLS12381FieldElement::from_bytes_be(
-                &x1.l
-                    .iter()
-                    .flat_map(|e| e.to_be_bytes())
-                    .collect::<Vec<u8>>(),
-            )
-            .unwrap();
-            let y0_field = BLS12381FieldElement::from_bytes_be(
-                &y0.l
-                    .iter()
-                    .flat_map(|e| e.to_be_bytes())
-                    .collect::<Vec<u8>>(),
-            )
-            .unwrap();
-            let y1_field = BLS12381FieldElement::from_bytes_be(
-                &y1.l
-                    .iter()
-                    .flat_map(|e| e.to_be_bytes())
-                    .collect::<Vec<u8>>(),
-            )
-            .unwrap();
-
-            let x = BLS12381TwistCurveFieldElement::new([x0_field, x1_field]);
-            let y = BLS12381TwistCurveFieldElement::new([y0_field, y1_field]);
-            G2Point::from_affine(x, y).unwrap()
-        })
-        .collect();
-
-    StructuredReferenceString::<G1, G2Point>::new(&g1_points, &g2_points)
-}
 
 #[cfg(test)]
 mod tests {
@@ -775,7 +694,10 @@ mod tests {
         cyclic_group::IsGroup, field::element::FieldElement, polynomial::Polynomial,
         traits::ByteConversion,
     };
-    use crate::srs::{load_trusted_setup_file, load_trusted_setup_file_to_g1_points_and_g2_points};
+    use crate::srs::{
+        load_trusted_setup_file, load_trusted_setup_file_to_g1_points_and_g2_points,
+        vecs_to_structured_reference_string,
+    };
     use crate::utils::polynomial_to_blob_with_size;
     use crate::{
         blst_fr, blst_p1, blst_p2, compute_kzg_proof, fr_t,
@@ -906,7 +828,7 @@ mod tests {
         assert_eq!(hex_string,
             "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
 
-        let srs_from_file = super::vecs_to_structured_reference_string(&g1_points, &g2_points);
+        let srs_from_file = vecs_to_structured_reference_string(&g1_points, &g2_points);
         let s = load_trusted_setup_file("test/trusted_setup.txt").unwrap();
 
         let srs = kzgsettings_to_structured_reference_string(&s);
