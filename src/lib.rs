@@ -758,7 +758,42 @@ pub extern "C" fn load_trusted_setup(
 // TODO: implement
 #[no_mangle]
 pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FILE) -> C_KZG_RET {
-    todo!()
+    let mut stat: libc::stat = libc::stat {
+        st_dev: 0,
+        st_mode: 0,
+        st_nlink: 0,
+        st_ino: 0,
+        st_uid: 0,
+        st_gid: 0,
+        st_rdev: 0,
+        st_atime: 0,
+        st_atime_nsec: 0,
+        st_mtime: 0,
+        st_mtime_nsec: 0,
+        st_ctime: 0,
+        st_ctime_nsec: 0,
+        st_birthtime: 0,
+        st_birthtime_nsec: 0,
+        st_size: 0,
+        st_blocks: 0,
+        st_blksize: 0,
+        st_flags: 0,
+        st_gen: 0,
+        st_lspare: 0,
+        st_qspare: [0, 0],
+    };
+    let ret = unsafe { libc::fstat(libc::fileno(input), &mut stat) };
+    let mut buf = String::with_capacity(stat.st_size as usize);
+    let ret = unsafe { libc::fread(buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 1, input) };
+    let lines = buf.lines();
+    let Ok(ret_kzg) = srs::load_trusted_setup_file(lines) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+    unsafe {
+        std::ptr::copy(&ret_kzg, out as *mut KZGSettings, 1);
+    }
+
+    C_KZG_RET::C_KZG_OK
 }
 
 // TODO: implement
@@ -927,8 +962,10 @@ mod tests {
 
     #[test]
     fn test_read_srs() {
+        let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
+        let lines = lines.lines();
         let (g1_points, g2_points) =
-            load_trusted_setup_file_to_g1_points_and_g2_points("test/trusted_setup.txt").unwrap();
+            load_trusted_setup_file_to_g1_points_and_g2_points(lines).unwrap();
 
         let g = g1_points[0].clone();
         let x_g = g.x().to_bytes_be();
@@ -939,7 +976,9 @@ mod tests {
             "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
 
         let srs_from_file = vecs_to_structured_reference_string(&g1_points, &g2_points);
-        let s = load_trusted_setup_file("test/trusted_setup.txt").unwrap();
+        let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
+        let lines = lines.lines();
+        let s = load_trusted_setup_file(lines).unwrap();
 
         let srs = kzgsettings_to_structured_reference_string(&s);
 

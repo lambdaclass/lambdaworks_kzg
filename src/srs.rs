@@ -8,13 +8,13 @@ use crate::{
 };
 use core::ptr::null_mut;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Lines};
+use std::io::{self, BufRead, BufReader};
 use std::marker;
 use std::path::Path;
 
 /// Helper function that reads a file line by line and
 /// returns an iterator over the lines.
-fn read_lines<P>(path: P) -> io::Result<Lines<BufReader<File>>>
+pub fn read_lines<P>(path: P) -> io::Result<std::io::Lines<BufReader<File>>>
 where
     P: AsRef<Path>,
 {
@@ -23,10 +23,8 @@ where
 }
 
 pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
-    path: &str,
+    mut lines: std::str::Lines,
 ) -> io::Result<(Vec<G1>, Vec<G2Point>)> {
-    let mut lines = read_lines(path)?;
-
     let mut g1_bytes: [u8; crate::BYTES_PER_G1_POINT] = [0; crate::BYTES_PER_G1_POINT];
     let mut g1_points: Vec<G1> = Vec::new();
 
@@ -39,7 +37,7 @@ pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
         .ok_or(io::Error::new(
             io::ErrorKind::InvalidData,
             "Invalid file format",
-        ))??
+        ))?
         .parse::<usize>()
         .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
@@ -48,7 +46,7 @@ pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
         .ok_or(io::Error::new(
             io::ErrorKind::InvalidData,
             "Invalid file format",
-        ))??
+        ))?
         .parse::<usize>()
         .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
@@ -58,10 +56,7 @@ pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
     for (pos, line) in lines.enumerate() {
         if pos < num_g1_points {
             // read g1 point
-            let Ok(line_string) = line  else {
-                return Err(std::io::ErrorKind::InvalidData.into());
-            };
-            hex::decode_to_slice(line_string, &mut g1_bytes)
+            hex::decode_to_slice(line, &mut g1_bytes)
                 .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
             let g1_point =
@@ -70,10 +65,7 @@ pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
             g1_points.push(g1_point);
         } else if pos < num_total_points {
             // read g2 point
-            let Ok(line_string) = line  else {
-                return Err(std::io::ErrorKind::InvalidData.into());
-            };
-            hex::decode_to_slice(line_string, &mut g2_bytes)
+            hex::decode_to_slice(line, &mut g2_bytes)
                 .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
             let g2_point =
@@ -104,8 +96,8 @@ pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
 /// # Returns
 ///
 /// * `KZGSettings` - The loaded trusted setup data
-pub fn load_trusted_setup_file(path: &str) -> io::Result<KZGSettings> {
-    let (g1_points, g2_points) = load_trusted_setup_file_to_g1_points_and_g2_points(path)?;
+pub fn load_trusted_setup_file(lines: std::str::Lines<'_>) -> io::Result<KZGSettings<'static>> {
+    let (g1_points, g2_points) = load_trusted_setup_file_to_g1_points_and_g2_points(lines)?;
 
     let mut g1_values_vec: Vec<blst_p1> = g1_points.iter().map(g1_point_to_blst_p1).collect();
     let g1_values = g1_values_vec.as_mut_ptr();
@@ -291,6 +283,8 @@ mod tests {
 
     #[test]
     fn test_read_srs() {
-        load_trusted_setup_file("test/trusted_setup_4.txt").unwrap();
+        let lines = std::fs::read_to_string("test/trusted_setup_4.txt").unwrap();
+        let lines = lines.lines();
+        load_trusted_setup_file(lines).unwrap();
     }
 }
