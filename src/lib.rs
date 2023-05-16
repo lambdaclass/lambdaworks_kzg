@@ -672,19 +672,26 @@ fn verify_kzg_proof_batch(
 }
 
 // TODO: implement
-/*
-C_KZG_RET load_trusted_setup(
-    KZGSettings *out,
-    const uint8_t *g1_bytes, /* n1 * 48 bytes */
-    size_t n1,
-    const uint8_t *g2_bytes, /* n2 * 96 bytes */
-    size_t n2
-);
+#[no_mangle]
+pub extern "C" fn load_trusted_setup(
+    out: *mut KZGSettings,
+    g1_bytes: *const u8, /* n1 * 48 bytes */
+    n1: usize,
+    g2_bytes: *const u8, /* n2 * 96 bytes */
+    n2: usize,
+) -> C_KZG_RET {
+    todo!()
+}
 
-C_KZG_RET load_trusted_setup_file(KZGSettings *out, FILE *in);
+#[no_mangle]
+pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings /*, FILE *in*/) -> C_KZG_RET {
+    todo!()
+}
 
-void free_trusted_setup(KZGSettings *s);
-*/
+#[no_mangle]
+pub extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
+    todo!()
+}
 
 #[cfg(test)]
 mod tests {
