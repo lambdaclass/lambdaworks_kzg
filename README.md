@@ -25,3 +25,4 @@ If you use ```lambdaworks_kzg``` libraries in your research projects, please cit
 ## Notes
 
 * `math` module copied from [lambdaworks](https://github.com/lambdaclass/lambdaworks/) rev 8f338ff50a9557b0bea359cba231ea941e8aab80
+* On MacOS you will need to install llvm with homebrew to run the fuzzer (`brew install llvm`) and add it to your `PATH`. That's because the version shipped with the OS is too old and doesn't come with the `libfuzzer` library required.
