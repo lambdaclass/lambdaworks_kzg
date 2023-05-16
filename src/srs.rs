@@ -9,7 +9,7 @@ use crate::{
 use core::ptr::null_mut;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
-use std::marker;
+
 use std::path::Path;
 
 /// Helper function that reads a file line by line and
@@ -96,7 +96,7 @@ pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
 /// # Returns
 ///
 /// * `KZGSettings` - The loaded trusted setup data
-pub fn load_trusted_setup_file(lines: std::str::Lines<'_>) -> io::Result<KZGSettings<'static>> {
+pub fn load_trusted_setup_file(lines: std::str::Lines<'_>) -> io::Result<KZGSettings> {
     let (g1_points, g2_points) = load_trusted_setup_file_to_g1_points_and_g2_points(lines)?;
 
     let mut g1_values_vec: Vec<blst_p1> = g1_points.iter().map(g1_point_to_blst_p1).collect();
@@ -112,9 +112,6 @@ pub fn load_trusted_setup_file(lines: std::str::Lines<'_>) -> io::Result<KZGSett
         fs: null_mut(),
         g1_values,
         g2_values,
-        _marker: marker::PhantomData,
-        _marker2: marker::PhantomData,
-        _marker3: marker::PhantomData,
     };
 
     /* TODO: add this to the KZGSettings struct

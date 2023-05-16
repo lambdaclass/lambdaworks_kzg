@@ -33,7 +33,7 @@ use math::{
     traits::ByteConversion,
 };
 use srs::{g1_point_to_blst_p1, g2_point_to_blst_p2, kzgsettings_to_structured_reference_string};
-use std::marker;
+
 
 pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
@@ -175,7 +175,7 @@ pub struct blst_p2_affine {
 #[allow(non_camel_case_types)]
 #[repr(C)]
 /// Stores the setup and parameters needed for performing FFTs.
-pub struct FFTSettings<'a> {
+pub struct FFTSettings {
     /** The maximum size of FFT these settings support, a power of 2. */
     pub max_width: u64,
     /**
@@ -196,18 +196,15 @@ pub struct FFTSettings<'a> {
     /** Powers of the root of unity in bit-reversal permutation order, length
      * `max_width`. */
     pub roots_of_unity: *mut fr_t,
-
-    _marker: marker::PhantomData<&'a *mut fr_t>,
 }
 
-impl<'a> Default for FFTSettings<'a> {
+impl Default for FFTSettings {
     fn default() -> Self {
         Self {
             max_width: 0,
             expanded_roots_of_unity: null_mut(),
             reverse_roots_of_unity: null_mut(),
             roots_of_unity: null_mut(),
-            _marker: marker::PhantomData,
         }
     }
 }
@@ -215,30 +212,23 @@ impl<'a> Default for FFTSettings<'a> {
 #[derive(Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
-pub struct KZGSettings<'a> {
+pub struct KZGSettings {
     /** The corresponding settings for performing FFTs. */
-    pub fs: *mut FFTSettings<'a>,
+    pub fs: *mut FFTSettings,
     /** G1 group elements from the trusted setup,
      * in Lagrange form bit-reversal permutation. */
     pub g1_values: *mut g1_t,
     /** G2 group elements from the trusted setup;
      * both arrays have `FIELD_ELEMENTS_PER_BLOB` elements. */
     pub g2_values: *mut g2_t,
-
-    _marker: marker::PhantomData<&'a *mut FFTSettings<'a>>,
-    _marker2: marker::PhantomData<&'a *mut g1_t>,
-    _marker3: marker::PhantomData<&'a *mut g2_t>,
 }
 
-impl<'a> Default for KZGSettings<'a> {
+impl Default for KZGSettings {
     fn default() -> Self {
         Self {
             fs: null_mut(),
             g1_values: null_mut(),
             g2_values: null_mut(),
-            _marker: marker::PhantomData,
-            _marker2: marker::PhantomData,
-            _marker3: marker::PhantomData,
         }
     }
 }
@@ -732,9 +722,6 @@ pub extern "C" fn load_trusted_setup(
         fs: null_mut(),
         g1_values,
         g2_values,
-        _marker: marker::PhantomData,
-        _marker2: marker::PhantomData,
-        _marker3: marker::PhantomData,
     };
 
     /*
@@ -880,7 +867,6 @@ mod tests {
             expanded_roots_of_unity: &mut zero_fr_expanded_roots_of_unity as *mut fr_t,
             reverse_roots_of_unity: &mut zero_fr_reverse_roots_of_unity as *mut fr_t,
             roots_of_unity: &mut zero_fr_roots_of_unity as *mut fr_t,
-            _marker: std::marker::PhantomData,
         };
 
         let mut zer_fr_g1_values = blst_p1::default();
@@ -890,9 +876,6 @@ mod tests {
             fs: &mut fft_settings as *mut FFTSettings,
             g1_values: &mut zer_fr_g1_values as *mut blst_p1,
             g2_values: &mut zer_fr_g2_values as *mut blst_p2,
-            _marker: std::marker::PhantomData,
-            _marker2: std::marker::PhantomData,
-            _marker3: std::marker::PhantomData,
         };
 
         let ret = compute_kzg_proof(
