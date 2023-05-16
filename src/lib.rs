@@ -18,6 +18,7 @@ use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::field::extensions::quadratic::QuadraticExtensionField;
 use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
 use core::ptr::null_mut;
+use libc::FILE;
 use math::polynomial::Polynomial;
 use math::{
     elliptic_curve::short_weierstrass::{
@@ -683,11 +684,13 @@ pub extern "C" fn load_trusted_setup(
     todo!()
 }
 
+// TODO: implement
 #[no_mangle]
-pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings /*, FILE *in*/) -> C_KZG_RET {
+pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FILE) -> C_KZG_RET {
     todo!()
 }
 
+// TODO: implement
 #[no_mangle]
 pub extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
     todo!()
