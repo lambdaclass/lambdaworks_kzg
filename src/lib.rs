@@ -747,7 +747,8 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
     let mut buf = [0u8; 64 * 1024];
     let mut contents: Vec<u8> = Vec::with_capacity(1024 * 1024);
     loop {
-        let ret = unsafe { libc::fread(buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 1, input) };
+        let ret =
+            unsafe { libc::fread(buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 1, input) };
         if ret == 0 {
             break;
         }
