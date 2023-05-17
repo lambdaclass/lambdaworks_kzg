@@ -198,4 +198,16 @@ mod tests {
 
         assert_eq!(g_2, decompressed_g2);
     }
+
+    #[test]
+    fn short_test_compress_and_decompress_point() {
+        let line = "8d0c6eeadd3f8529d67246f77404a4ac2d9d7fd7d50cf103d3e6abb9003e5e36d8f322663ebced6707a7f46d97b7566d";
+        let bytes = hex::decode(line).unwrap();
+        let mut input_bytes: [u8; 48] = bytes.try_into().unwrap();
+        let point = decompress_g1_point(&mut input_bytes).unwrap();
+        let compressed = compress_g1_point(&point).unwrap();
+        let hex_string = hex::encode(compressed);
+
+        assert_eq!("8d0c6eeadd3f8529d67246f77404a4ac2d9d7fd7d50cf103d3e6abb9003e5e36d8f322663ebced6707a7f46d97b7566d", &hex_string);
+    }
 }
