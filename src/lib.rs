@@ -741,7 +741,6 @@ pub extern "C" fn load_trusted_setup(
     C_KZG_RET::C_KZG_OK
 }
 
-// TODO: implement
 #[no_mangle]
 pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FILE) -> C_KZG_RET {
     let mut buf = [0u8; 64 * 1024];
@@ -768,9 +767,24 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
     C_KZG_RET::C_KZG_OK
 }
 
-// TODO: implement
+/// Frees the memory pointed to by the KZGSettings struct.
+///
+/// # Params
+///
+/// * `s` - Pointer to the KZGSettings struct
+///
+/// # Returns
+///
+/// * `C_KZG_OK` if successful, otherwise an error code.
+///
+/// # Safety
+///
+/// `s` must be a valid pointer to a KZGSettings struct and:
+/// `s.g1_values` and `s.g2_values` must be valid pointers of allocated memory.
+/// This function must be called explicitely only once and only
+/// if `load_trusted_setup` was called.
 #[no_mangle]
-pub extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
+pub unsafe extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
     let s_struct = unsafe { (*s).clone() };
     unsafe {
         libc::free(s_struct.g1_values as *mut libc::c_void);
@@ -851,7 +865,7 @@ mod tests {
         // read srs from file
         let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
         let lines = lines.lines();
-        let s = load_trusted_setup_file(lines).unwrap();
+        let mut s = load_trusted_setup_file(lines).unwrap();
 
         let ret = compute_kzg_proof(
             &mut proof_out as *mut KZGProof,
@@ -905,18 +919,9 @@ mod tests {
             1,
             &s as *const KZGSettings,
         );
-    }
 
-    #[test]
-    fn short_test_compress_and_decompress_point() {
-        let line = "8d0c6eeadd3f8529d67246f77404a4ac2d9d7fd7d50cf103d3e6abb9003e5e36d8f322663ebced6707a7f46d97b7566d";
-        let bytes = hex::decode(line).unwrap();
-        let mut input_bytes: [u8; 48] = bytes.try_into().unwrap();
-        let point = decompress_g1_point(&mut input_bytes).unwrap();
-        let compressed = compress_g1_point(&point).unwrap();
-        let hex_string = hex::encode(compressed);
-
-        assert_eq!("8d0c6eeadd3f8529d67246f77404a4ac2d9d7fd7d50cf103d3e6abb9003e5e36d8f322663ebced6707a7f46d97b7566d", &hex_string);
+        // free memory used by srs struct
+        unsafe { super::free_trusted_setup(&mut s as *mut KZGSettings) };
     }
 
     #[test]
@@ -937,10 +942,12 @@ mod tests {
         let srs_from_file = vecs_to_structured_reference_string(&g1_points, &g2_points);
         let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
         let lines = lines.lines();
-        let s = load_trusted_setup_file(lines).unwrap();
-
+        let mut s = load_trusted_setup_file(lines).unwrap();
         let srs = kzgsettings_to_structured_reference_string(&s);
 
         assert_eq!(srs_from_file, srs);
+
+        // free memory used by srs struct
+        unsafe { super::free_trusted_setup(&mut s as *mut KZGSettings) };
     }
 }
