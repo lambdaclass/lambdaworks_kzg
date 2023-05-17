@@ -843,7 +843,6 @@ mod tests {
     };
 
     #[test]
-    //#[ignore]
     fn test_compute_kzg_proof_for_a_simple_poly() {
         // Test this case:
         // polinomial: 1 cte
