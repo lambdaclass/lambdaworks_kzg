@@ -768,7 +768,20 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
     C_KZG_RET::C_KZG_OK
 }
 
-// TODO: implement
+/// Frees the memory pointed to by the KZGSettings struct.
+///
+/// # Params
+///
+/// * `s` - Pointer to the KZGSettings struct
+///
+/// # Returns
+///
+/// * `C_KZG_OK` if successful, otherwise an error code.
+///
+/// # Safety
+///
+/// `s` must be a valid pointer to a KZGSettings struct and:
+/// `s.g1_values` and `s.g2_values` must be valid pointers of allocated memory.
 #[no_mangle]
 pub unsafe extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
     let s_struct = unsafe { (*s).clone() };
