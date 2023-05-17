@@ -8,7 +8,7 @@ pub mod sqrt;
 pub mod srs;
 pub mod utils;
 
-use crate::compress::{compress_g1_point, decompress_g1_point};
+use crate::compress::{compress_g1_point, decompress_g1_point, decompress_g2_point};
 use crate::math::cyclic_group::IsGroup;
 pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
     FrConfig, FrElement, FrField, MODULUS,
@@ -18,6 +18,7 @@ use crate::math::elliptic_curve::traits::IsEllipticCurve;
 use crate::math::field::extensions::quadratic::QuadraticExtensionField;
 use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
 use core::ptr::null_mut;
+use libc::FILE;
 use math::polynomial::Polynomial;
 use math::{
     elliptic_curve::short_weierstrass::{
@@ -31,8 +32,7 @@ use math::{
     msm::g1_lincomb,
     traits::ByteConversion,
 };
-use srs::kzgsettings_to_structured_reference_string;
-use std::marker;
+use srs::{g1_point_to_blst_p1, g2_point_to_blst_p2, kzgsettings_to_structured_reference_string};
 
 pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
@@ -174,7 +174,7 @@ pub struct blst_p2_affine {
 #[allow(non_camel_case_types)]
 #[repr(C)]
 /// Stores the setup and parameters needed for performing FFTs.
-pub struct FFTSettings<'a> {
+pub struct FFTSettings {
     /** The maximum size of FFT these settings support, a power of 2. */
     pub max_width: u64,
     /**
@@ -195,18 +195,15 @@ pub struct FFTSettings<'a> {
     /** Powers of the root of unity in bit-reversal permutation order, length
      * `max_width`. */
     pub roots_of_unity: *mut fr_t,
-
-    _marker: marker::PhantomData<&'a *mut fr_t>,
 }
 
-impl<'a> Default for FFTSettings<'a> {
+impl Default for FFTSettings {
     fn default() -> Self {
         Self {
             max_width: 0,
             expanded_roots_of_unity: null_mut(),
             reverse_roots_of_unity: null_mut(),
             roots_of_unity: null_mut(),
-            _marker: marker::PhantomData,
         }
     }
 }
@@ -214,30 +211,23 @@ impl<'a> Default for FFTSettings<'a> {
 #[derive(Clone)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
-pub struct KZGSettings<'a> {
+pub struct KZGSettings {
     /** The corresponding settings for performing FFTs. */
-    pub fs: *mut FFTSettings<'a>,
+    pub fs: *mut FFTSettings,
     /** G1 group elements from the trusted setup,
      * in Lagrange form bit-reversal permutation. */
     pub g1_values: *mut g1_t,
     /** G2 group elements from the trusted setup;
      * both arrays have `FIELD_ELEMENTS_PER_BLOB` elements. */
     pub g2_values: *mut g2_t,
-
-    _marker: marker::PhantomData<&'a *mut FFTSettings<'a>>,
-    _marker2: marker::PhantomData<&'a *mut g1_t>,
-    _marker3: marker::PhantomData<&'a *mut g2_t>,
 }
 
-impl<'a> Default for KZGSettings<'a> {
+impl Default for KZGSettings {
     fn default() -> Self {
         Self {
             fs: null_mut(),
             g1_values: null_mut(),
             g2_values: null_mut(),
-            _marker: marker::PhantomData,
-            _marker2: marker::PhantomData,
-            _marker3: marker::PhantomData,
         }
     }
 }
@@ -671,20 +661,153 @@ fn verify_kzg_proof_batch(
     Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }
 
+/// Load trusted setup into a KZGSettings.
+///
+/// # Remark
+///
+/// Free after use with free_trusted_setup().
+///
+/// # Params
+///
+/// * `out` - Pointer to the stored trusted setup data
+/// * `g1_bytes` - Array of G1 points
+/// * `n1` - Number of `g1` points in g1_bytes
+/// * `g2_bytes` - Array of G2 points
+/// * `n2` - Number of `g2` points in g2_bytes
+///
+#[no_mangle]
+pub extern "C" fn load_trusted_setup(
+    out: *mut KZGSettings,
+    g1_bytes: *const u8, /* n1 * 48 bytes */
+    n1: usize,
+    g2_bytes: *const u8, /* n2 * 96 bytes */
+    n2: usize,
+) -> C_KZG_RET {
+    if n1 != TRUSTED_SETUP_NUM_G1_POINTS || n2 != NUM_G2_POINTS {
+        return C_KZG_RET::C_KZG_BADARGS;
+    }
+    let b1_bytes_slice: &[[u8; 48]] =
+        unsafe { std::slice::from_raw_parts(g1_bytes as *const [u8; 48], n1) };
+    let b2_bytes_slice: &[[u8; 96]] =
+        unsafe { std::slice::from_raw_parts(g2_bytes as *const [u8; 96], n2) };
+
+    let mut g1_values_vec: Vec<g1_t> = Vec::with_capacity(n1);
+    let mut g2_values_vec: Vec<g2_t> = Vec::with_capacity(n2);
+
+    // Convert all g1 bytes to g1 points
+    for item in b1_bytes_slice.iter().take(n1) {
+        let ret = validate_kzg_g1(&mut item.clone()).unwrap();
+        g1_values_vec.push(ret);
+    }
+
+    // Convert all g2 bytes to g2 points
+    for item in b2_bytes_slice.iter().take(n2) {
+        let ret = blst_p2_uncompress(&mut item.clone()).unwrap();
+        g2_values_vec.push(ret);
+    }
+    // It's the smallest power of 2 >= n1
+    let mut max_scale: i32 = 0;
+    while (1 << max_scale) < n1 {
+        max_scale += 1;
+    }
+
+    let g1_values = g1_values_vec.as_mut_ptr();
+    std::mem::forget(g1_values_vec);
+
+    let g2_values = g2_values_vec.as_mut_ptr();
+    std::mem::forget(g2_values_vec);
+
+    let settings = KZGSettings {
+        fs: null_mut(),
+        g1_values,
+        g2_values,
+    };
+
+    /*
+    // Initialize the KZGSettings struct
+    ret = c_kzg_malloc((void **)&out->fs, sizeof(FFTSettings));
+    if (ret != C_KZG_OK) goto out_error;
+    ret = new_fft_settings(out->fs, max_scale);
+    if (ret != C_KZG_OK) goto out_error;
+    ret = fft_g1(out->g1_values, g1_projective, true, n1, out->fs);
+    if (ret != C_KZG_OK) goto out_error;
+    ret = bit_reversal_permutation(out->g1_values, sizeof(g1_t), n1);
+    if (ret != C_KZG_OK) goto out_error;
+    */
+
+    unsafe {
+        std::ptr::copy(&settings, out as *mut KZGSettings, 1);
+    }
+    C_KZG_RET::C_KZG_OK
+}
+
 // TODO: implement
-/*
-C_KZG_RET load_trusted_setup(
-    KZGSettings *out,
-    const uint8_t *g1_bytes, /* n1 * 48 bytes */
-    size_t n1,
-    const uint8_t *g2_bytes, /* n2 * 96 bytes */
-    size_t n2
-);
+#[no_mangle]
+pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FILE) -> C_KZG_RET {
+    let mut buf = [0u8; 64 * 1024];
+    let mut contents: Vec<u8> = Vec::with_capacity(1024 * 1024);
+    loop {
+        let ret =
+            unsafe { libc::fread(buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 1, input) };
+        if ret == 0 {
+            break;
+        }
+        contents.extend_from_slice(buf.as_slice());
+    }
+    let Ok(contents) = String::from_utf8(contents) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+    let lines = contents.lines();
+    let Ok(ret_kzg) = srs::load_trusted_setup_file(lines) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
+    unsafe {
+        std::ptr::copy(&ret_kzg, out as *mut KZGSettings, 1);
+    }
 
-C_KZG_RET load_trusted_setup_file(KZGSettings *out, FILE *in);
+    C_KZG_RET::C_KZG_OK
+}
 
-void free_trusted_setup(KZGSettings *s);
-*/
+// TODO: implement
+#[no_mangle]
+pub extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
+    let s_struct = unsafe { (*s).clone() };
+    unsafe {
+        libc::free(s_struct.g1_values as *mut libc::c_void);
+        libc::free(s_struct.g2_values as *mut libc::c_void);
+    };
+
+    C_KZG_RET::C_KZG_OK
+}
+
+/// Perform BLS validation required by the types KZGProof and KZGCommitment.
+///
+/// # Remarks
+///
+/// This function deviates from the spec because it returns (via an
+///     output argument) the g1 point. This way is more efficient (faster)
+///     but the function name is a bit misleading.
+///
+/// # Parameters
+///
+/// * `out `- out The output g1 point
+/// * `in` - b   The proof/commitment bytes
+///
+fn validate_kzg_g1(b_slice: &mut [u8; 48]) -> Result<g1_t, C_KZG_RET> {
+    let Ok(point) = decompress_g1_point(b_slice) else {
+        return Err(C_KZG_RET::C_KZG_ERROR);
+    };
+
+    Ok(g1_point_to_blst_p1(&point))
+}
+
+fn blst_p2_uncompress(b_slice: &mut [u8; 96]) -> Result<g2_t, C_KZG_RET> {
+    let Ok(point) = decompress_g2_point(b_slice) else {
+        return Err(C_KZG_RET::C_KZG_ERROR);
+    };
+
+    Ok(g2_point_to_blst_p2(&point))
+}
 
 #[cfg(test)]
 mod tests {
@@ -735,7 +858,6 @@ mod tests {
             expanded_roots_of_unity: &mut zero_fr_expanded_roots_of_unity as *mut fr_t,
             reverse_roots_of_unity: &mut zero_fr_reverse_roots_of_unity as *mut fr_t,
             roots_of_unity: &mut zero_fr_roots_of_unity as *mut fr_t,
-            _marker: std::marker::PhantomData,
         };
 
         let mut zer_fr_g1_values = blst_p1::default();
@@ -745,9 +867,6 @@ mod tests {
             fs: &mut fft_settings as *mut FFTSettings,
             g1_values: &mut zer_fr_g1_values as *mut blst_p1,
             g2_values: &mut zer_fr_g2_values as *mut blst_p2,
-            _marker: std::marker::PhantomData,
-            _marker2: std::marker::PhantomData,
-            _marker3: std::marker::PhantomData,
         };
 
         let ret = compute_kzg_proof(
@@ -817,8 +936,10 @@ mod tests {
 
     #[test]
     fn test_read_srs() {
+        let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
+        let lines = lines.lines();
         let (g1_points, g2_points) =
-            load_trusted_setup_file_to_g1_points_and_g2_points("test/trusted_setup.txt").unwrap();
+            load_trusted_setup_file_to_g1_points_and_g2_points(lines).unwrap();
 
         let g = g1_points[0].clone();
         let x_g = g.x().to_bytes_be();
@@ -829,7 +950,9 @@ mod tests {
             "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
 
         let srs_from_file = vecs_to_structured_reference_string(&g1_points, &g2_points);
-        let s = load_trusted_setup_file("test/trusted_setup.txt").unwrap();
+        let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
+        let lines = lines.lines();
+        let s = load_trusted_setup_file(lines).unwrap();
 
         let srs = kzgsettings_to_structured_reference_string(&s);
 
