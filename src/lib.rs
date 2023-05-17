@@ -823,15 +823,14 @@ mod tests {
     };
     use crate::utils::polynomial_to_blob_with_size;
     use crate::{
-        blst_fr, blst_p1, blst_p2, compute_kzg_proof, fr_t,
-        kzgsettings_to_structured_reference_string, verify_blob_kzg_proof_batch, verify_kzg_proof,
-        Blob, Bytes32, Bytes48, FFTSettings, FrElement, G1Point, KZGProof, KZGSettings,
+        compute_kzg_proof, kzgsettings_to_structured_reference_string, verify_blob_kzg_proof_batch,
+        verify_kzg_proof, Blob, Bytes32, Bytes48, FrElement, G1Point, KZGProof, KZGSettings,
         BYTES_PER_BLOB, C_KZG_RET, FE,
     };
 
     #[test]
-    #[ignore]
-    fn test_compute_kzg_proof() {
+    //#[ignore]
+    fn test_compute_kzg_proof_for_a_simple_poly() {
         // Test this case:
         // polinomial: 1 cte
         // evaluation fr: 1
@@ -849,25 +848,10 @@ mod tests {
         // z = 1
         let z_bytes: Bytes32 = FE::from(1).to_bytes_be().try_into().unwrap();
 
-        let mut zero_fr_expanded_roots_of_unity = blst_fr::default();
-        let mut zero_fr_reverse_roots_of_unity = blst_fr::default();
-        let mut zero_fr_roots_of_unity = blst_fr::default();
-
-        let mut fft_settings = FFTSettings {
-            max_width: 8,
-            expanded_roots_of_unity: &mut zero_fr_expanded_roots_of_unity as *mut fr_t,
-            reverse_roots_of_unity: &mut zero_fr_reverse_roots_of_unity as *mut fr_t,
-            roots_of_unity: &mut zero_fr_roots_of_unity as *mut fr_t,
-        };
-
-        let mut zer_fr_g1_values = blst_p1::default();
-        let mut zer_fr_g2_values = blst_p2::default();
-
-        let s = KZGSettings {
-            fs: &mut fft_settings as *mut FFTSettings,
-            g1_values: &mut zer_fr_g1_values as *mut blst_p1,
-            g2_values: &mut zer_fr_g2_values as *mut blst_p2,
-        };
+        // read srs from file
+        let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
+        let lines = lines.lines();
+        let s = load_trusted_setup_file(lines).unwrap();
 
         let ret = compute_kzg_proof(
             &mut proof_out as *mut KZGProof,
@@ -905,6 +889,7 @@ mod tests {
             &s as *const KZGSettings,
         );
 
+        assert!(ok);
         assert_eq!(ret_verify, ok_enum_kzg);
 
         // FIXME: make blobs useful
