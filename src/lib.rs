@@ -744,34 +744,19 @@ pub extern "C" fn load_trusted_setup(
 // TODO: implement
 #[no_mangle]
 pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FILE) -> C_KZG_RET {
-    let mut stat: libc::stat = libc::stat {
-        st_dev: 0,
-        st_mode: 0,
-        st_nlink: 0,
-        st_ino: 0,
-        st_uid: 0,
-        st_gid: 0,
-        st_rdev: 0,
-        st_atime: 0,
-        st_atime_nsec: 0,
-        st_mtime: 0,
-        st_mtime_nsec: 0,
-        st_ctime: 0,
-        st_ctime_nsec: 0,
-        st_birthtime: 0,
-        st_birthtime_nsec: 0,
-        st_size: 0,
-        st_blocks: 0,
-        st_blksize: 0,
-        st_flags: 0,
-        st_gen: 0,
-        st_lspare: 0,
-        st_qspare: [0, 0],
+    let mut buf = [0u8; 64 * 1024];
+    let mut contents: Vec<u8> = Vec::with_capacity(1024 * 1024);
+    loop {
+        let ret = unsafe { libc::fread(buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 1, input) };
+        if ret == 0 {
+            break;
+        }
+        contents.extend_from_slice(buf.as_slice());
+    }
+    let Ok(contents) = String::from_utf8(contents) else {
+        return C_KZG_RET::C_KZG_ERROR;
     };
-    let ret = unsafe { libc::fstat(libc::fileno(input), &mut stat) };
-    let mut buf = String::with_capacity(stat.st_size as usize);
-    let ret = unsafe { libc::fread(buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 1, input) };
-    let lines = buf.lines();
+    let lines = contents.lines();
     let Ok(ret_kzg) = srs::load_trusted_setup_file(lines) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
