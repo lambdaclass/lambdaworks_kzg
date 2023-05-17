@@ -741,7 +741,6 @@ pub extern "C" fn load_trusted_setup(
     C_KZG_RET::C_KZG_OK
 }
 
-// TODO: implement
 #[no_mangle]
 pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FILE) -> C_KZG_RET {
     let mut buf = [0u8; 64 * 1024];
