@@ -97,7 +97,6 @@ fn test_compute_kzg_proof_for_a_simple_poly() {
     unsafe { free_trusted_setup(&mut s as *mut KZGSettings) };
 }
 
-#[ignore]
 #[test]
 fn test_compute_kzg_proof_for_a_simple_poly_2() {
     // Test this case:
@@ -138,26 +137,11 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
     let ok_enum_kzg = C_KZG_RET::C_KZG_OK;
     assert_eq!(ret, ok_enum_kzg);
 
-    // get first point of the srs
-    // assert proof is the first element in g2 points of srs
-    let g1_values_slice: &[blst_p1] =
-        unsafe { std::slice::from_raw_parts(s.g1_values as *const blst_p1, 4096) };
-    let first_point_srs_blst = g1_values_slice[0].clone();
-    let proof_out_point = decompress_g1_point(&mut proof_out).unwrap();
-    let proof_out_point_blst = g1_point_to_blst_p1(&proof_out_point);
-    assert_eq!(first_point_srs_blst, proof_out_point_blst);
-
     // verify proof
     let srs = kzgsettings_to_structured_reference_string(&s);
     let kzg = lambdaworks_kzg::KZG::new(srs);
     let commitment = kzg.commit(&polynomial);
     let commitment_bytes = compress_g1_point(&commitment).unwrap();
-
-    // check commitment is second point of SRS
-    let second_point_srs_blst = g1_values_slice[1].clone();
-    let commitment_blst = g1_point_to_blst_p1(&commitment);
-
-    assert_eq!(second_point_srs_blst, commitment_blst);
 
     let mut ok = false;
     let ret_verify = verify_kzg_proof(
@@ -171,6 +155,20 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
 
     //assert!(ok);
     assert_eq!(ret_verify, ok_enum_kzg);
+
+    // get first point of the srs
+    // assert proof is the first element in g2 points of srs
+    let g1_values_slice: &[blst_p1] =
+        unsafe { std::slice::from_raw_parts(s.g1_values as *const blst_p1, 4096) };
+    let first_point_srs_blst = g1_values_slice[0].clone();
+    let proof_out_point = decompress_g1_point(&mut proof_out).unwrap();
+    let proof_out_point_blst = g1_point_to_blst_p1(&proof_out_point);
+    assert_eq!(first_point_srs_blst, proof_out_point_blst);
+
+    // check commitment is second point of SRS
+    let second_point_srs_blst = g1_values_slice[1].clone();
+    let commitment_blst = g1_point_to_blst_p1(&commitment);
+    assert_eq!(second_point_srs_blst, commitment_blst);
 
     // free memory used by srs struct
     unsafe { free_trusted_setup(&mut s as *mut KZGSettings) };
