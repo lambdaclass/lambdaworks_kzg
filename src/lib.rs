@@ -265,7 +265,7 @@ pub extern "C" fn blob_to_kzg_commitment(
     unsafe {
         std::ptr::copy(
             commitment_bytes.as_ptr(),
-            out as *mut u8,
+            out.cast::<u8>(),
             BYTES_PER_COMMITMENT,
         );
     }
@@ -308,7 +308,9 @@ pub extern "C" fn compute_kzg_proof(
     };
 
     let fr_y: FE = polynomial.evaluate(&fr_z);
-    let y_out_slice: [u8; 32] = fr_y.to_bytes_be().try_into().unwrap();
+    let Ok(y_out_slice) = TryInto::<[u8; 32]>::try_into(fr_y.to_bytes_be()) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
 
     let srs = kzgsettings_to_structured_reference_string(&s_struct);
     let kzg = KZG::new(srs);
@@ -320,10 +322,10 @@ pub extern "C" fn compute_kzg_proof(
     unsafe {
         std::ptr::copy(
             compressed_proof.as_ptr(),
-            proof_out as *mut u8,
+            proof_out.cast::<u8>(),
             BYTES_PER_PROOF,
         );
-        std::ptr::copy(y_out_slice.as_ptr(), y_out as *mut u8, 32);
+        std::ptr::copy(y_out_slice.as_ptr(), y_out.cast::<u8>(), 32);
     }
 
     C_KZG_RET::C_KZG_OK
@@ -381,7 +383,7 @@ pub extern "C" fn compute_blob_kzg_proof(
     };
 
     unsafe {
-        std::ptr::copy(compressed_proof.as_ptr(), out as *mut u8, BYTES_PER_PROOF);
+        std::ptr::copy(compressed_proof.as_ptr(), out.cast::<u8>(), BYTES_PER_PROOF);
     }
 
     C_KZG_RET::C_KZG_OK
@@ -594,7 +596,7 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
 }
 
 ///
-/// Helper function for verify_blob_kzg_proof_batch(): actually perform the
+/// Helper function for `verify_blob_kzg_proof_batch`(): actually perform the
 /// verification.
 ///
 /// Remark: This function assumes that `n` is trusted and that all input arrays
@@ -626,7 +628,7 @@ fn verify_kzg_proof_batch(
 ) -> Result<bool, Vec<u8>> {
     let r_powers: Vec<_> = utils::compute_r_powers(commitments_g1, zs_fr, ys_fr, proofs_g1)?
         .iter()
-        .map(|x| x.representative())
+        .map(FieldElement::representative)
         .collect();
 
     let mut c_minus_y = Vec::new();
@@ -663,19 +665,19 @@ fn verify_kzg_proof_batch(
     Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }
 
-/// Load trusted setup into a KZGSettings.
+/// Load trusted setup into a `KZGSettings`.
 ///
 /// # Remark
 ///
-/// Free after use with free_trusted_setup().
+/// Free after use with `free_trusted_setup`().
 ///
 /// # Params
 ///
 /// * `out` - Pointer to the stored trusted setup data
 /// * `g1_bytes` - Array of G1 points
-/// * `n1` - Number of `g1` points in g1_bytes
+/// * `n1` - Number of `g1` points in `g1_bytes`
 /// * `g2_bytes` - Array of G2 points
-/// * `n2` - Number of `g2` points in g2_bytes
+/// * `n2` - Number of `g2` points in `g2_bytes`
 ///
 #[no_mangle]
 pub extern "C" fn load_trusted_setup(
@@ -689,22 +691,26 @@ pub extern "C" fn load_trusted_setup(
         return C_KZG_RET::C_KZG_BADARGS;
     }
     let b1_bytes_slice: &[[u8; 48]] =
-        unsafe { std::slice::from_raw_parts(g1_bytes as *const [u8; 48], n1) };
+        unsafe { std::slice::from_raw_parts(g1_bytes.cast::<[u8; 48]>(), n1) };
     let b2_bytes_slice: &[[u8; 96]] =
-        unsafe { std::slice::from_raw_parts(g2_bytes as *const [u8; 96], n2) };
+        unsafe { std::slice::from_raw_parts(g2_bytes.cast::<[u8; 96]>(), n2) };
 
     let mut g1_values_vec: Vec<g1_t> = Vec::with_capacity(n1);
     let mut g2_values_vec: Vec<g2_t> = Vec::with_capacity(n2);
 
     // Convert all g1 bytes to g1 points
     for item in b1_bytes_slice.iter().take(n1) {
-        let ret = validate_kzg_g1(&mut item.clone()).unwrap();
+        let Ok(ret) = validate_kzg_g1(&mut item.clone()) else {
+            return C_KZG_RET::C_KZG_ERROR;
+        };
         g1_values_vec.push(ret);
     }
 
     // Convert all g2 bytes to g2 points
     for item in b2_bytes_slice.iter().take(n2) {
-        let ret = blst_p2_uncompress(&mut item.clone()).unwrap();
+        let Ok(ret) = blst_p2_uncompress(&mut item.clone()) else {
+            return C_KZG_RET::C_KZG_ERROR;
+        };
         g2_values_vec.push(ret);
     }
     // It's the smallest power of 2 >= n1
@@ -738,7 +744,7 @@ pub extern "C" fn load_trusted_setup(
     */
 
     unsafe {
-        std::ptr::copy(&settings, out as *mut KZGSettings, 1);
+        std::ptr::copy(&settings, out.cast::<KZGSettings>(), 1);
     }
     C_KZG_RET::C_KZG_OK
 }
@@ -749,7 +755,7 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
     let mut contents: Vec<u8> = Vec::with_capacity(1024 * 1024);
     loop {
         let ret =
-            unsafe { libc::fread(buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 1, input) };
+            unsafe { libc::fread(buf.as_mut_ptr().cast::<libc::c_void>(), buf.len(), 1, input) };
         if ret == 0 {
             break;
         }
@@ -763,17 +769,17 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
         return C_KZG_RET::C_KZG_ERROR;
     };
     unsafe {
-        std::ptr::copy(&ret_kzg, out as *mut KZGSettings, 1);
+        std::ptr::copy(&ret_kzg, out.cast::<KZGSettings>(), 1);
     }
 
     C_KZG_RET::C_KZG_OK
 }
 
-/// Frees the memory pointed to by the KZGSettings struct.
+/// Frees the memory pointed to by the `KZGSettings` struct.
 ///
 /// # Params
 ///
-/// * `s` - Pointer to the KZGSettings struct
+/// * `s` - Pointer to the `KZGSettings` struct
 ///
 /// # Returns
 ///
@@ -781,7 +787,7 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
 ///
 /// # Safety
 ///
-/// `s` must be a valid pointer to a KZGSettings struct and:
+/// `s` must be a valid pointer to a `KZGSettings` struct and:
 /// `s.g1_values` and `s.g2_values` must be valid pointers of allocated memory.
 /// This function must be called explicitely only once and only
 /// if `load_trusted_setup` was called.
@@ -789,14 +795,14 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
 pub unsafe extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
     let s_struct = unsafe { (*s).clone() };
     unsafe {
-        libc::free(s_struct.g1_values as *mut libc::c_void);
-        libc::free(s_struct.g2_values as *mut libc::c_void);
+        libc::free(s_struct.g1_values.cast::<libc::c_void>());
+        libc::free(s_struct.g2_values.cast::<libc::c_void>());
     };
 
     C_KZG_RET::C_KZG_OK
 }
 
-/// Perform BLS validation required by the types KZGProof and KZGCommitment.
+/// Perform BLS validation required by the types `KZGProof` and `KZGCommitment`.
 ///
 /// # Remarks
 ///

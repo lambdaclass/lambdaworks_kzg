@@ -3,6 +3,7 @@ use crate::{BLS12381FieldElement, BLS12381TwistCurveFieldElement};
 use std::cmp::Ordering;
 
 /// * `third_bit` - if 1, then the square root is the greater one, otherwise it is the smaller one.
+#[must_use]
 pub fn sqrt_qfe(
     input: &BLS12381TwistCurveFieldElement,
     third_bit: u8,
@@ -16,7 +17,6 @@ pub fn sqrt_qfe(
         if b == crate::BLS12381FieldElement::zero() {
             // second part is zero
             let (y_sqrt_1, y_sqrt_2) = a.sqrt()?;
-            println!("y_sqrt_1: {:?}", y_sqrt_1);
 
             let y_aux = match (
                 y_sqrt_1.representative().cmp(&y_sqrt_2.representative()),
@@ -66,10 +66,7 @@ pub fn sqrt_qfe(
 
                     Some(BLS12381TwistCurveFieldElement::new([x_0, x_1]))
                 }
-                LegendreSymbol::MinusOne => {
-                    println!("### LegendreSymbol::MinusOne");
-                    None
-                }
+                LegendreSymbol::MinusOne => None,
                 LegendreSymbol::Zero => {
                     unreachable!("The input is zero, but we already handled this case.")
                 }

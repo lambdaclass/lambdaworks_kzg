@@ -127,6 +127,7 @@ pub fn load_trusted_setup_file(lines: std::str::Lines<'_>) -> io::Result<KZGSett
     Ok(settings)
 }
 
+#[must_use]
 pub fn g1_point_to_blst_p1(v: &G1) -> blst_p1 {
     if v.is_neutral_element() {
         return blst_p1 {
@@ -151,6 +152,7 @@ pub fn g1_point_to_blst_p1(v: &G1) -> blst_p1 {
     }
 }
 
+#[must_use]
 pub fn g2_point_to_blst_p2(v: &G2Point) -> blst_p2 {
     let vx = v.to_affine().x().value().clone();
     let x = blst_fp2 {
@@ -191,6 +193,7 @@ pub fn g2_point_to_blst_p2(v: &G2Point) -> blst_p2 {
     blst_p2 { x, y, z }
 }
 
+#[must_use]
 pub fn vecs_to_structured_reference_string(
     g1_points: &[G1],
     g2_points: &[G2Point],
@@ -198,6 +201,7 @@ pub fn vecs_to_structured_reference_string(
     StructuredReferenceString::<G1, G2Point>::new(g1_points, g2_points)
 }
 
+#[must_use]
 pub fn kzgsettings_to_structured_reference_string(
     s: &KZGSettings,
 ) -> StructuredReferenceString<G1, G2Point> {

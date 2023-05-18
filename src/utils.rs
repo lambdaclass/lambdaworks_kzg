@@ -40,6 +40,7 @@ where
     Ok(Polynomial::new(&coefficients))
 }
 
+#[must_use]
 pub fn polynomial_to_blob(polynomial: &Polynomial<FE>) -> Vec<u8>
 where
     FE: ByteConversion,
@@ -48,7 +49,7 @@ where
 
     coefficients
         .iter()
-        .flat_map(|coef| coef.to_bytes_be())
+        .flat_map(ByteConversion::to_bytes_be)
         .collect()
 }
 
@@ -61,7 +62,7 @@ where
     let coefficients = polynomial.coefficients();
     let mut ret_vec: Vec<u8> = coefficients
         .iter()
-        .flat_map(|coef| coef.to_bytes_be())
+        .flat_map(ByteConversion::to_bytes_be)
         .collect();
 
     let len = ret_vec.len();
@@ -79,6 +80,7 @@ where
 
 /// Helper function to create SRS. Once the deserialization of
 /// the SRS is done, this function should be removed.
+#[must_use]
 pub fn create_srs() -> StructuredReferenceString<
     <BLS12381AtePairing as IsPairing>::G1Point,
     <BLS12381AtePairing as IsPairing>::G2Point,
@@ -191,7 +193,7 @@ pub fn compute_r_powers(
     Ok(compute_powers(&hash_fr, n))
 }
 
-/// Perform pairings and test whether the outcomes are equal in G_T.
+/// Perform pairings and test whether the outcomes are equal in `G_T`.
 ///
 /// Tests whether `e(a1, a2) == e(b1, b2)`.
 ///
@@ -206,6 +208,7 @@ pub fn compute_r_powers(
 ///
 /// * true  The pairings were equal
 /// * false The pairings were not equal
+#[must_use]
 pub fn pairings_verify(a1: &G1Point, a2: &G2Point, b1: &G1Point, b2: &G2Point) -> bool {
     // As an optimisation, we want to invert one of the pairings,
     // so we negate one of the points.
