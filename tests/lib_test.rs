@@ -79,20 +79,6 @@ fn test_compute_kzg_proof_for_a_simple_poly() {
     assert!(ok);
     assert_eq!(ret_verify, ok_enum_kzg);
 
-    // FIXME: make blobs useful
-    let blobs: Blob = [0; BYTES_PER_BLOB];
-
-    // verify blob as a batch
-    ok = false;
-    verify_blob_kzg_proof_batch(
-        &mut ok as *mut bool,
-        &blobs as *const Blob,
-        &commitment_bytes as *const Bytes48,
-        &proof_out as *const Bytes48,
-        1,
-        &s as *const KZGSettings,
-    );
-
     // free memory used by srs struct
     unsafe { free_trusted_setup(&mut s as *mut KZGSettings) };
 }
