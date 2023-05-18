@@ -55,7 +55,8 @@ pub fn sqrt_qfe(
     }
 }
 
-fn select_sqrt_value_from_third_bit(
+#[must_use]
+pub fn select_sqrt_value_from_third_bit(
     sqrt_1: BLS12381FieldElement,
     sqrt_2: BLS12381FieldElement,
     third_bit: u8,
@@ -65,10 +66,8 @@ fn select_sqrt_value_from_third_bit(
         third_bit,
     ) {
         (Ordering::Greater, 0) => sqrt_2,
-        (Ordering::Greater, _) => sqrt_1,
-        (Ordering::Less, 0) => sqrt_1,
+        (Ordering::Greater, _) | (Ordering::Less, 0) | (Ordering::Equal, _) => sqrt_1,
         (Ordering::Less, _) => sqrt_2,
-        (Ordering::Equal, _) => sqrt_1,
     }
 }
 
