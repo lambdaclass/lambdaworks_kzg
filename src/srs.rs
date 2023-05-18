@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_read_srs() {
-        let lines = std::fs::read_to_string("test/trusted_setup_4.txt").unwrap();
+        let lines = std::fs::read_to_string("tests/trusted_setup_4.txt").unwrap();
         let lines = lines.lines();
         load_trusted_setup_file(lines).unwrap();
     }

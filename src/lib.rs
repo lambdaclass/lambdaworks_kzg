@@ -32,7 +32,9 @@ use math::{
     msm::g1_lincomb,
     traits::ByteConversion,
 };
-use srs::{g1_point_to_blst_p1, g2_point_to_blst_p2, kzgsettings_to_structured_reference_string};
+pub use srs::{
+    g1_point_to_blst_p1, g2_point_to_blst_p2, kzgsettings_to_structured_reference_string,
+};
 
 pub type G1 = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
@@ -41,7 +43,7 @@ pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
 pub type BLS12381TwistCurveFieldElement = FieldElement<QuadraticExtensionField<LevelOneResidue>>;
 #[allow(clippy::upper_case_acronyms)]
-type FE = FrElement;
+pub type FE = FrElement;
 
 #[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
@@ -108,14 +110,14 @@ pub struct blst_fr {
     l: [limb_t; 256 / 8 / core::mem::size_of::<limb_t>()],
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_fp {
     l: [limb_t; 384 / 8 / core::mem::size_of::<limb_t>()],
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_p1 {
@@ -419,8 +421,8 @@ pub extern "C" fn verify_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    // FIXME: We should not use create_src() for this instantiation.
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let ret = kzg.verify(&z_fr, &y_fr, &commitment_g1, &proof_g1);
 
     if ret {
@@ -821,133 +823,4 @@ fn blst_p2_uncompress(b_slice: &mut [u8; 96]) -> Result<g2_t, C_KZG_RET> {
     };
 
     Ok(g2_point_to_blst_p2(&point))
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::commitments::traits::IsCommitmentScheme;
-    use crate::compress::{compress_g1_point, decompress_g1_point};
-    use crate::math::{
-        cyclic_group::IsGroup, field::element::FieldElement, polynomial::Polynomial,
-        traits::ByteConversion,
-    };
-    use crate::srs::{
-        load_trusted_setup_file, load_trusted_setup_file_to_g1_points_and_g2_points,
-        vecs_to_structured_reference_string,
-    };
-    use crate::utils::polynomial_to_blob_with_size;
-    use crate::{
-        compute_kzg_proof, kzgsettings_to_structured_reference_string, verify_blob_kzg_proof_batch,
-        verify_kzg_proof, Blob, Bytes32, Bytes48, FrElement, G1Point, KZGProof, KZGSettings,
-        BYTES_PER_BLOB, C_KZG_RET, FE,
-    };
-
-    #[test]
-    //#[ignore]
-    fn test_compute_kzg_proof_for_a_simple_poly() {
-        // Test this case:
-        // polinomial: 1 cte
-        // evaluation fr: 1
-        // Expected result:
-        // proof: inf
-        // y_out: 1
-
-        // output buffers
-        let mut proof_out: KZGProof = [0; 48];
-        let mut y_out: Bytes32 = [0; 32];
-
-        // assign poly 1
-        let polynomial = Polynomial::<FrElement>::new(&[FieldElement::one()]);
-        let blob = polynomial_to_blob_with_size(&polynomial).unwrap();
-        // z = 1
-        let z_bytes: Bytes32 = FE::from(1).to_bytes_be().try_into().unwrap();
-
-        // read srs from file
-        let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
-        let lines = lines.lines();
-        let mut s = load_trusted_setup_file(lines).unwrap();
-
-        let ret = compute_kzg_proof(
-            &mut proof_out as *mut KZGProof,
-            &mut y_out as *mut Bytes32,
-            &blob as *const Blob,
-            &z_bytes as *const Bytes32,
-            &s as *const KZGSettings,
-        );
-
-        // assert ret function
-        let ok_enum_kzg = C_KZG_RET::C_KZG_OK;
-        assert_eq!(ret, ok_enum_kzg);
-
-        // y evaluation is one
-        let one_fr = FE::one();
-        let y_out_fr = FE::from_bytes_be(&y_out).unwrap();
-        assert_eq!(one_fr, y_out_fr);
-
-        // proof is inf
-        let p = decompress_g1_point(&mut proof_out).unwrap();
-        let inf = G1Point::neutral_element();
-        assert_eq!(p, inf);
-
-        let kzg = crate::KZG::new(crate::utils::create_srs());
-        let commitment = kzg.commit(&polynomial);
-        let commitment_bytes = compress_g1_point(&commitment).unwrap();
-
-        let mut ok = false;
-        let ret_verify = verify_kzg_proof(
-            &mut ok as *mut bool,
-            &commitment_bytes as *const Bytes48,
-            &z_bytes as *const Bytes32,
-            &y_out as *const Bytes32,
-            &proof_out as *const Bytes48,
-            &s as *const KZGSettings,
-        );
-
-        assert!(ok);
-        assert_eq!(ret_verify, ok_enum_kzg);
-
-        // FIXME: make blobs useful
-        let blobs: Blob = [0; BYTES_PER_BLOB];
-
-        // verify blob as a batch
-        ok = false;
-        verify_blob_kzg_proof_batch(
-            &mut ok as *mut bool,
-            &blobs as *const Blob,
-            &commitment_bytes as *const Bytes48,
-            &proof_out as *const Bytes48,
-            1,
-            &s as *const KZGSettings,
-        );
-
-        // free memory used by srs struct
-        unsafe { super::free_trusted_setup(&mut s as *mut KZGSettings) };
-    }
-
-    #[test]
-    fn test_read_srs() {
-        let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
-        let lines = lines.lines();
-        let (g1_points, g2_points) =
-            load_trusted_setup_file_to_g1_points_and_g2_points(lines).unwrap();
-
-        let g = g1_points[0].clone();
-        let x_g = g.x().to_bytes_be();
-        let compressed = compress_g1_point(&g).unwrap();
-        let hex_string = hex::encode(compressed);
-
-        assert_eq!(hex_string,
-            "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
-
-        let srs_from_file = vecs_to_structured_reference_string(&g1_points, &g2_points);
-        let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
-        let lines = lines.lines();
-        let mut s = load_trusted_setup_file(lines).unwrap();
-        let srs = kzgsettings_to_structured_reference_string(&s);
-
-        assert_eq!(srs_from_file, srs);
-
-        // free memory used by srs struct
-        unsafe { super::free_trusted_setup(&mut s as *mut KZGSettings) };
-    }
 }
