@@ -258,19 +258,19 @@ pub fn vecs_to_structured_reference_string(
 pub fn kzgsettings_to_structured_reference_string(
     s: &KZGSettings,
 ) -> Result<StructuredReferenceString<G1, G2Point>, ByteConversionError> {
-    let g1_values = s.g1_values;
-    let g2_values = s.g2_values;
+    let g1_points_slice: [blst_p1; NUM_G1_POINTS] = unsafe { *s.g1_values.cast() };
+    let g2_points_slice: [blst_p2; NUM_G2_POINTS] = unsafe { *s.g2_values.cast() };
 
-    let g1_points_slice: [blst_p1; NUM_G1_POINTS] = unsafe { *g1_values.cast() };
-    let g2_points_slice: [blst_p2; NUM_G2_POINTS] = unsafe { *g2_values.cast() };
-
+    // construct g1_points vec
     let g1_points: Result<Vec<G1>, ByteConversionError> =
         g1_points_slice.iter().map(blst_p1_to_g1_point).collect();
     let g1_points = g1_points?;
 
+    // construct gs_points vec
     let g2_points: Result<Vec<G2Point>, ByteConversionError> =
         g2_points_slice.iter().map(blst_p2_to_g2_point).collect();
     let g2_points = g2_points?;
+
     Ok(StructuredReferenceString::<G1, G2Point>::new(
         &g1_points, &g2_points,
     ))
