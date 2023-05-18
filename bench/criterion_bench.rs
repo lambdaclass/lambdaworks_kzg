@@ -9,7 +9,7 @@ fn bench_read_srs(c: &mut Criterion) {
 
     let s = load_trusted_setup_file(TRUSTED_SETUP_FILE.lines()).unwrap();
     c.bench_function("kzgsettings_to_ref_string", |b| {
-        b.iter(|| black_box(kzgsettings_to_structured_reference_string(black_box(&s))));
+        b.iter(|| black_box(kzgsettings_to_structured_reference_string(black_box(&s)).unwrap()));
     });
 }
 

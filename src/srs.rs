@@ -1,6 +1,7 @@
 use crate::commitments::kzg::StructuredReferenceString;
 use crate::compress::{decompress_g1_point, decompress_g2_point};
 use crate::math::cyclic_group::IsGroup;
+use crate::math::errors::ByteConversionError;
 use crate::math::{elliptic_curve::traits::FromAffine, traits::ByteConversion};
 use crate::{
     blst_fp, blst_fp2, blst_p1, blst_p2, BLS12381FieldElement, BLS12381TwistCurveFieldElement,
@@ -127,6 +128,7 @@ pub fn load_trusted_setup_file(lines: std::str::Lines<'_>) -> io::Result<KZGSett
     Ok(settings)
 }
 
+#[must_use]
 pub fn g1_point_to_blst_p1(v: &G1) -> blst_p1 {
     if v.is_neutral_element() {
         return blst_p1 {
@@ -151,6 +153,26 @@ pub fn g1_point_to_blst_p1(v: &G1) -> blst_p1 {
     }
 }
 
+pub fn blst_p1_to_g1_point(point: &blst_p1) -> Result<G1, ByteConversionError> {
+    let x_field = point
+        .x
+        .l
+        .iter()
+        .flat_map(|e| e.to_be_bytes())
+        .collect::<Vec<u8>>();
+    let x = BLS12381FieldElement::from_bytes_be(&x_field)?;
+
+    let y_field = point
+        .y
+        .l
+        .iter()
+        .flat_map(|e| e.to_be_bytes())
+        .collect::<Vec<u8>>();
+    let y = BLS12381FieldElement::from_bytes_be(&y_field)?;
+    G1::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)
+}
+
+#[must_use]
 pub fn g2_point_to_blst_p2(v: &G2Point) -> blst_p2 {
     let vx = v.to_affine().x().value().clone();
     let x = blst_fp2 {
@@ -191,6 +213,41 @@ pub fn g2_point_to_blst_p2(v: &G2Point) -> blst_p2 {
     blst_p2 { x, y, z }
 }
 
+pub fn blst_p2_to_g2_point(point: &blst_p2) -> Result<G2Point, ByteConversionError> {
+    let [x0, x1] = point.x.fp;
+    let [y0, y1] = point.y.fp;
+
+    let x0_field = BLS12381FieldElement::from_bytes_be(
+        &x0.l
+            .iter()
+            .flat_map(|e| e.to_be_bytes())
+            .collect::<Vec<u8>>(),
+    )?;
+    let x1_field = BLS12381FieldElement::from_bytes_be(
+        &x1.l
+            .iter()
+            .flat_map(|e| e.to_be_bytes())
+            .collect::<Vec<u8>>(),
+    )?;
+    let y0_field = BLS12381FieldElement::from_bytes_be(
+        &y0.l
+            .iter()
+            .flat_map(|e| e.to_be_bytes())
+            .collect::<Vec<u8>>(),
+    )?;
+    let y1_field = BLS12381FieldElement::from_bytes_be(
+        &y1.l
+            .iter()
+            .flat_map(|e| e.to_be_bytes())
+            .collect::<Vec<u8>>(),
+    )?;
+
+    let x = BLS12381TwistCurveFieldElement::new([x0_field, x1_field]);
+    let y = BLS12381TwistCurveFieldElement::new([y0_field, y1_field]);
+    G2Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)
+}
+
+#[must_use]
 pub fn vecs_to_structured_reference_string(
     g1_points: &[G1],
     g2_points: &[G2Point],
@@ -200,78 +257,23 @@ pub fn vecs_to_structured_reference_string(
 
 pub fn kzgsettings_to_structured_reference_string(
     s: &KZGSettings,
-) -> StructuredReferenceString<G1, G2Point> {
-    let g1_values = s.g1_values;
-    let g2_values = s.g2_values;
+) -> Result<StructuredReferenceString<G1, G2Point>, ByteConversionError> {
+    let g1_points_slice: [blst_p1; NUM_G1_POINTS] = unsafe { *s.g1_values.cast() };
+    let g2_points_slice: [blst_p2; NUM_G2_POINTS] = unsafe { *s.g2_values.cast() };
 
-    let g1_points_slice: [blst_p1; NUM_G1_POINTS] = unsafe { *g1_values.cast() };
-    let g2_points_slice: [blst_p2; NUM_G2_POINTS] = unsafe { *g2_values.cast() };
+    // construct g1_points vec
+    let g1_points: Result<Vec<G1>, ByteConversionError> =
+        g1_points_slice.iter().map(blst_p1_to_g1_point).collect();
+    let g1_points = g1_points?;
 
-    let g1_points: Vec<G1> = g1_points_slice
-        .iter()
-        .map(|point| {
-            let x_field = point
-                .x
-                .l
-                .iter()
-                .flat_map(|e| e.to_be_bytes())
-                .collect::<Vec<u8>>();
-            let x = BLS12381FieldElement::from_bytes_be(&x_field).unwrap();
+    // construct gs_points vec
+    let g2_points: Result<Vec<G2Point>, ByteConversionError> =
+        g2_points_slice.iter().map(blst_p2_to_g2_point).collect();
+    let g2_points = g2_points?;
 
-            let y_field = point
-                .y
-                .l
-                .iter()
-                .flat_map(|e| e.to_be_bytes())
-                .collect::<Vec<u8>>();
-            let y = BLS12381FieldElement::from_bytes_be(&y_field).unwrap();
-            G1::from_affine(x, y).unwrap()
-        })
-        .collect();
-
-    let g2_points: Vec<G2Point> = g2_points_slice
-        .iter()
-        .map(|point| {
-            let [x0, x1] = point.x.fp;
-            let [y0, y1] = point.y.fp;
-            //let z = point.z;
-
-            let x0_field = BLS12381FieldElement::from_bytes_be(
-                &x0.l
-                    .iter()
-                    .flat_map(|e| e.to_be_bytes())
-                    .collect::<Vec<u8>>(),
-            )
-            .unwrap();
-            let x1_field = BLS12381FieldElement::from_bytes_be(
-                &x1.l
-                    .iter()
-                    .flat_map(|e| e.to_be_bytes())
-                    .collect::<Vec<u8>>(),
-            )
-            .unwrap();
-            let y0_field = BLS12381FieldElement::from_bytes_be(
-                &y0.l
-                    .iter()
-                    .flat_map(|e| e.to_be_bytes())
-                    .collect::<Vec<u8>>(),
-            )
-            .unwrap();
-            let y1_field = BLS12381FieldElement::from_bytes_be(
-                &y1.l
-                    .iter()
-                    .flat_map(|e| e.to_be_bytes())
-                    .collect::<Vec<u8>>(),
-            )
-            .unwrap();
-
-            let x = BLS12381TwistCurveFieldElement::new([x0_field, x1_field]);
-            let y = BLS12381TwistCurveFieldElement::new([y0_field, y1_field]);
-            G2Point::from_affine(x, y).unwrap()
-        })
-        .collect();
-
-    StructuredReferenceString::<G1, G2Point>::new(&g1_points, &g2_points)
+    Ok(StructuredReferenceString::<G1, G2Point>::new(
+        &g1_points, &g2_points,
+    ))
 }
 
 #[cfg(test)]
