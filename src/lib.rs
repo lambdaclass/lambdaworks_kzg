@@ -421,8 +421,8 @@ pub extern "C" fn verify_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    // FIXME: We should not use create_src() for this instantiation.
-    let kzg = KZG::new(utils::create_srs());
+    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let kzg = KZG::new(srs);
     let ret = kzg.verify(&z_fr, &y_fr, &commitment_g1, &proof_g1);
 
     if ret {
