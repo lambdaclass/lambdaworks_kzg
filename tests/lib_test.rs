@@ -11,8 +11,8 @@ use lambdaworks_kzg::srs::{
 use lambdaworks_kzg::utils::polynomial_to_blob_with_size;
 use lambdaworks_kzg::{
     blst_p1, compute_kzg_proof, free_trusted_setup, kzgsettings_to_structured_reference_string,
-    verify_blob_kzg_proof_batch, verify_kzg_proof, Blob, Bytes32, Bytes48, FrElement, G1Point,
-    KZGProof, KZGSettings, BYTES_PER_BLOB, C_KZG_RET, FE,
+    verify_kzg_proof, Blob, Bytes32, Bytes48, FrElement, G1Point, KZGProof, KZGSettings, C_KZG_RET,
+    FE,
 };
 use pretty_assertions::assert_eq;
 
