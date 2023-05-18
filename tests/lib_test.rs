@@ -100,11 +100,11 @@ fn test_compute_kzg_proof_for_a_simple_poly() {
 #[test]
 fn test_compute_kzg_proof_for_a_simple_poly_2() {
     // Test this case:
-    // polinomial: 1 cte
-    // evaluation fr: 1
+    // polinomial: x
+    // evaluation fr: 2
     // Expected result:
-    // proof: inf
-    // y_out: 1
+    // proof: first point of srs
+    // y_out: 2
 
     // output buffers
     let mut proof_out: KZGProof = [0; 48];
@@ -153,7 +153,7 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
         &s as *const KZGSettings,
     );
 
-    //assert!(ok);
+    assert!(ok);
     assert_eq!(ret_verify, ok_enum_kzg);
 
     // get first point of the srs
