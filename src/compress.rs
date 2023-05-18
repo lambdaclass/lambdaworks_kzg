@@ -2,11 +2,11 @@ use crate::math::cyclic_group::IsGroup;
 use crate::math::elliptic_curve::traits::FromAffine;
 use crate::math::field::extensions::quadratic::QuadraticExtensionFieldElement;
 use crate::math::{errors::ByteConversionError, traits::ByteConversion};
+use crate::sqrt::select_sqrt_value_from_third_bit;
 use crate::BLS12381TwistCurveFieldElement;
 use crate::G1Point;
 use crate::MODULUS;
 use crate::{BLS12381FieldElement, G2Point};
-use std::cmp::Ordering;
 use std::ops::Neg;
 
 pub fn check_point_is_in_subgroup(point: &G1Point) -> bool {
@@ -45,19 +45,8 @@ pub fn decompress_g1_point(input_bytes: &mut [u8; 48]) -> Result<G1Point, ByteCo
     // we call "negative" to the greate root,
     // if the third bit is 1, we take this grater value.
     // Otherwise, we take the second one.
-    let y = match (
-        y_sqrt_1.representative().cmp(&y_sqrt_2.representative()),
-        third_bit,
-    ) {
-        (Ordering::Greater, 0) => y_sqrt_2,
-        (Ordering::Greater, _) => y_sqrt_1,
-        (Ordering::Less, 0) => y_sqrt_1,
-        (Ordering::Less, _) => y_sqrt_2,
-        (Ordering::Equal, _) => y_sqrt_1,
-    };
-
-    let point =
-        G1Point::from_affine(x, y.clone()).map_err(|_| ByteConversionError::InvalidValue)?;
+    let y = select_sqrt_value_from_third_bit(y_sqrt_1.clone(), y_sqrt_2.clone(), third_bit);
+    let point = G1Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)?;
 
     check_point_is_in_subgroup(&point)
         .then_some(point)
@@ -83,7 +72,6 @@ pub fn decompress_g2_point(input_bytes: &mut [u8; 96]) -> Result<G2Point, ByteCo
     if second_bit == 1 {
         return Ok(G2Point::neutral_element());
     }
-    let third_bit = prefix_bits & 1_u8;
 
     let first_byte_without_contorl_bits = (first_byte << 3) >> 3;
     input1[0] = first_byte_without_contorl_bits;

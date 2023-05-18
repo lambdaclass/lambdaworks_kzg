@@ -3,6 +3,7 @@ use crate::{BLS12381FieldElement, BLS12381TwistCurveFieldElement};
 use std::cmp::Ordering;
 
 /// * `third_bit` - if 1, then the square root is the greater one, otherwise it is the smaller one.
+#[must_use]
 pub fn sqrt_qfe(
     input: &BLS12381TwistCurveFieldElement,
     third_bit: u8,
@@ -16,18 +17,7 @@ pub fn sqrt_qfe(
         if b == crate::BLS12381FieldElement::zero() {
             // second part is zero
             let (y_sqrt_1, y_sqrt_2) = a.sqrt()?;
-            println!("y_sqrt_1: {:?}", y_sqrt_1);
-
-            let y_aux = match (
-                y_sqrt_1.representative().cmp(&y_sqrt_2.representative()),
-                third_bit,
-            ) {
-                (Ordering::Greater, 0) => y_sqrt_2,
-                (Ordering::Greater, _) => y_sqrt_1,
-                (Ordering::Less, 0) => y_sqrt_1,
-                (Ordering::Less, _) => y_sqrt_2,
-                (Ordering::Equal, _) => y_sqrt_1,
-            };
+            let y_aux = select_sqrt_value_from_third_bit(y_sqrt_1, y_sqrt_2, third_bit);
 
             Some(BLS12381TwistCurveFieldElement::new([
                 y_aux,
@@ -52,29 +42,32 @@ pub fn sqrt_qfe(
                         delta = (a + y_sqrt2) * two_inv;
                     };
                     let (x_sqrt_1, x_sqrt_2) = delta.sqrt()?;
-                    let x_0 = match (
-                        x_sqrt_1.representative().cmp(&x_sqrt_2.representative()),
-                        third_bit,
-                    ) {
-                        (Ordering::Greater, 0) => x_sqrt_2,
-                        (Ordering::Greater, _) => x_sqrt_1,
-                        (Ordering::Less, 0) => x_sqrt_1,
-                        (Ordering::Less, _) => x_sqrt_2,
-                        (Ordering::Equal, _) => x_sqrt_1,
-                    };
+                    let x_0 = select_sqrt_value_from_third_bit(x_sqrt_1, x_sqrt_2, third_bit);
                     let x_1 = b * (two * x_0.clone()).inv();
-
                     Some(BLS12381TwistCurveFieldElement::new([x_0, x_1]))
                 }
-                LegendreSymbol::MinusOne => {
-                    println!("### LegendreSymbol::MinusOne");
-                    None
-                }
+                LegendreSymbol::MinusOne => None,
                 LegendreSymbol::Zero => {
                     unreachable!("The input is zero, but we already handled this case.")
                 }
             }
         }
+    }
+}
+
+#[must_use]
+pub fn select_sqrt_value_from_third_bit(
+    sqrt_1: BLS12381FieldElement,
+    sqrt_2: BLS12381FieldElement,
+    third_bit: u8,
+) -> BLS12381FieldElement {
+    match (
+        sqrt_1.representative().cmp(&sqrt_2.representative()),
+        third_bit,
+    ) {
+        (Ordering::Greater, 0) => sqrt_2,
+        (Ordering::Greater, _) | (Ordering::Less, 0) | (Ordering::Equal, _) => sqrt_1,
+        (Ordering::Less, _) => sqrt_2,
     }
 }
 
