@@ -1,5 +1,4 @@
-#![allow(unused_variables)]
-#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(clippy::not_unsafe_ptr_arg_deref, clippy::module_name_repetitions)]
 
 pub mod commitments;
 pub mod compress;
@@ -255,7 +254,9 @@ pub extern "C" fn blob_to_kzg_commitment(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let Ok(srs) = kzgsettings_to_structured_reference_string(&s_struct) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
     let kzg = KZG::new(srs);
     let commitment: ShortWeierstrassProjectivePoint<BLS12381Curve> = kzg.commit(&polynomial);
     let Ok(commitment_bytes) = compress_g1_point(&commitment) else {
@@ -312,7 +313,9 @@ pub extern "C" fn compute_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let Ok(srs) = kzgsettings_to_structured_reference_string(&s_struct) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
     let kzg = KZG::new(srs);
     let proof = kzg.open(&fr_z, &fr_y, &polynomial);
     let Ok(compressed_proof) = compress_g1_point(&proof) else {
@@ -375,7 +378,9 @@ pub extern "C" fn compute_blob_kzg_proof(
     };
 
     let fr_y: FE = polynomial.evaluate(&fr_z);
-    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let Ok(srs) = kzgsettings_to_structured_reference_string(&s_struct) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
     let kzg = KZG::new(srs);
     let proof = kzg.open(&fr_z, &fr_y, &polynomial);
     let Ok(compressed_proof) = compress_g1_point(&proof) else {
@@ -423,7 +428,9 @@ pub extern "C" fn verify_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let Ok(srs) = kzgsettings_to_structured_reference_string(&s_struct) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
     let kzg = KZG::new(srs);
     let ret = kzg.verify(&z_fr, &y_fr, &commitment_g1, &proof_g1);
 
@@ -473,7 +480,9 @@ pub extern "C" fn verify_blob_kzg_proof(
 
     let y_fr: FE = polynomial.evaluate(&evaluation_challenge_fr);
 
-    let srs = kzgsettings_to_structured_reference_string(&s_struct);
+    let Ok(srs) = kzgsettings_to_structured_reference_string(&s_struct) else {
+        return C_KZG_RET::C_KZG_ERROR;
+    };
     let kzg = KZG::new(srs);
     let ret = kzg.verify(&evaluation_challenge_fr, &y_fr, &commitment_g1, &proof_g1);
 
@@ -634,7 +643,7 @@ fn verify_kzg_proof_batch(
     let mut c_minus_y = Vec::new();
     let mut r_times_z = Vec::new();
     // Compute \sum r^i * Proof_i
-    let proof_lincomb = g1_lincomb(proofs_g1, &r_powers);
+    // TODO: let proof_lincomb = g1_lincomb(proofs_g1, &r_powers);
     let g = BLS12381Curve::generator();
 
     for i in 0..n {
@@ -660,7 +669,9 @@ fn verify_kzg_proof_batch(
     // Get c_minus_y_lincomb + proof_z_lincomb
     let rhs_g1 = c_minus_y_lincomb.operate_with(&proof_z_lincomb);
 
-    let srs = kzgsettings_to_structured_reference_string(s);
+    let Ok(srs) = kzgsettings_to_structured_reference_string(s) else {
+        return Err(Vec::new());
+    };
     let kzg = KZG::new(srs);
     Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
 }

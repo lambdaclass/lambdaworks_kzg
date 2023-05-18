@@ -83,7 +83,6 @@ pub fn decompress_g2_point(input_bytes: &mut [u8; 96]) -> Result<G2Point, ByteCo
     if second_bit == 1 {
         return Ok(G2Point::neutral_element());
     }
-    let third_bit = prefix_bits & 1_u8;
 
     let first_byte_without_contorl_bits = (first_byte << 3) >> 3;
     input1[0] = first_byte_without_contorl_bits;
