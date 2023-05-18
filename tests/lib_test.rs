@@ -124,11 +124,7 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
     assert_eq!(ret, ok_enum_kzg);
 
     // verify proof
-<<<<<<< HEAD
-    let srs = kzgsettings_to_structured_reference_string(&s);
-=======
     let srs = kzgsettings_to_structured_reference_string(&s).unwrap();
->>>>>>> main
     let kzg = lambdaworks_kzg::KZG::new(srs);
     let commitment = kzg.commit(&polynomial);
     let commitment_bytes = compress_g1_point(&commitment).unwrap();
@@ -200,11 +196,7 @@ fn test_read_srs() {
     let lines = std::fs::read_to_string("tests/trusted_setup.txt").unwrap();
     let lines = lines.lines();
     let mut s = load_trusted_setup_file(lines).unwrap();
-<<<<<<< HEAD
-    let srs = kzgsettings_to_structured_reference_string(&s);
-=======
     let srs = kzgsettings_to_structured_reference_string(&s).unwrap();
->>>>>>> main
 
     assert_eq!(srs_from_file, srs);
 
