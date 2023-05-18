@@ -159,18 +159,6 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
 
     assert_eq!(second_point_srs_blst, commitment_blst);
 
-    /*
-            verify_kzg_proof(
-        ok: *mut bool,
-        commitment_bytes: *const Bytes48,
-        z_bytes: *const Bytes32,
-        y_bytes: *const Bytes32,
-        proof_bytes: *const Bytes48,
-        s: *const KZGSettings,
-    )
-
-    */
-
     let mut ok = false;
     let ret_verify = verify_kzg_proof(
         &mut ok as *mut bool,
