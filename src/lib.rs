@@ -108,14 +108,14 @@ pub struct blst_fr {
     l: [limb_t; 256 / 8 / core::mem::size_of::<limb_t>()],
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_fp {
     l: [limb_t; 384 / 8 / core::mem::size_of::<limb_t>()],
 }
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct blst_p1 {
@@ -832,14 +832,14 @@ mod tests {
         traits::ByteConversion,
     };
     use crate::srs::{
-        load_trusted_setup_file, load_trusted_setup_file_to_g1_points_and_g2_points,
-        vecs_to_structured_reference_string,
+        g1_point_to_blst_p1, load_trusted_setup_file,
+        load_trusted_setup_file_to_g1_points_and_g2_points, vecs_to_structured_reference_string,
     };
     use crate::utils::polynomial_to_blob_with_size;
     use crate::{
-        compute_kzg_proof, kzgsettings_to_structured_reference_string, verify_blob_kzg_proof_batch,
-        verify_kzg_proof, Blob, Bytes32, Bytes48, FrElement, G1Point, KZGProof, KZGSettings,
-        BYTES_PER_BLOB, C_KZG_RET, FE,
+        blst_p1, compute_kzg_proof, kzgsettings_to_structured_reference_string,
+        verify_blob_kzg_proof_batch, verify_kzg_proof, Blob, Bytes32, Bytes48, FrElement, G1Point,
+        KZGProof, KZGSettings, BYTES_PER_BLOB, C_KZG_RET, FE,
     };
 
     #[test]
@@ -918,6 +918,97 @@ mod tests {
             1,
             &s as *const KZGSettings,
         );
+
+        // free memory used by srs struct
+        unsafe { super::free_trusted_setup(&mut s as *mut KZGSettings) };
+    }
+
+    #[test]
+    fn test_compute_kzg_proof_for_a_simple_poly_2() {
+        // Test this case:
+        // polinomial: 1 cte
+        // evaluation fr: 1
+        // Expected result:
+        // proof: inf
+        // y_out: 1
+
+        // output buffers
+        let mut proof_out: KZGProof = [0; 48];
+        let mut y_out: Bytes32 = [0; 32];
+
+        // assign poly = x
+        let polynomial = Polynomial::<FrElement>::new(&[FieldElement::zero(), FieldElement::one()]);
+        let blob = polynomial_to_blob_with_size(&polynomial).unwrap();
+        // z = 2
+        let z_bytes: Bytes32 = FE::from(2).to_bytes_be().try_into().unwrap();
+        let z_fr = FrElement::from_bytes_be(&z_bytes).unwrap();
+
+        // read srs from file
+        let lines = std::fs::read_to_string("test/trusted_setup.txt").unwrap();
+        let lines = lines.lines();
+        let mut s = load_trusted_setup_file(lines).unwrap();
+
+        let ret = compute_kzg_proof(
+            &mut proof_out as *mut KZGProof,
+            &mut y_out as *mut Bytes32,
+            &blob as *const Blob,
+            &z_bytes as *const Bytes32,
+            &s as *const KZGSettings,
+        );
+
+        let y_out_field = FrElement::from_bytes_be(&y_out).unwrap();
+        println!("y_out_field: {:?}", y_out_field);
+        println!("z_fr: {:?}", z_fr);
+
+        // assert ret function
+        let ok_enum_kzg = C_KZG_RET::C_KZG_OK;
+        assert_eq!(ret, ok_enum_kzg);
+
+        // get first point of the srs
+        // assert proof is the first element in g2 points of srs
+        let g1_values_slice: &[blst_p1] =
+            unsafe { std::slice::from_raw_parts(s.g1_values as *const blst_p1, 4096) };
+        let first_point_srs_blst = g1_values_slice[0].clone();
+        let proof_out_point = decompress_g1_point(&mut proof_out).unwrap();
+        let proof_out_point_blst = g1_point_to_blst_p1(&proof_out_point);
+        assert_eq!(first_point_srs_blst, proof_out_point_blst);
+
+        // verify proof
+        let srs = kzgsettings_to_structured_reference_string(&s);
+        let kzg = crate::KZG::new(srs);
+        let commitment = kzg.commit(&polynomial);
+        let commitment_bytes = compress_g1_point(&commitment).unwrap();
+
+        // check commitment is second point of SRS
+        let second_point_srs_blst = g1_values_slice[1].clone();
+        let commitment_blst = g1_point_to_blst_p1(&commitment);
+
+        assert_eq!(second_point_srs_blst, commitment_blst);
+
+        /*
+                verify_kzg_proof(
+            ok: *mut bool,
+            commitment_bytes: *const Bytes48,
+            z_bytes: *const Bytes32,
+            y_bytes: *const Bytes32,
+            proof_bytes: *const Bytes48,
+            s: *const KZGSettings,
+        )
+
+        */
+
+        let mut ok = false;
+        let ret_verify = verify_kzg_proof(
+            &mut ok as *mut bool,
+            &commitment_bytes as *const Bytes48,
+            &z_bytes as *const Bytes32,
+            &y_out as *const Bytes32,
+            &proof_out as *const Bytes48,
+            &s as *const KZGSettings,
+        );
+
+        //assert!(ok);
+        //assert_eq!(ret_verify, ok_enum_kzg);
 
         // free memory used by srs struct
         unsafe { super::free_trusted_setup(&mut s as *mut KZGSettings) };
