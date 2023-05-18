@@ -160,13 +160,13 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
     // assert proof is the first element in g2 points of srs
     let g1_values_slice: &[blst_p1] =
         unsafe { std::slice::from_raw_parts(s.g1_values as *const blst_p1, 4096) };
-    let first_point_srs_blst = g1_values_slice[0].clone();
+    let first_point_srs_blst = g1_values_slice[0];
     let proof_out_point = decompress_g1_point(&mut proof_out).unwrap();
     let proof_out_point_blst = g1_point_to_blst_p1(&proof_out_point);
     assert_eq!(first_point_srs_blst, proof_out_point_blst);
 
     // check commitment is second point of SRS
-    let second_point_srs_blst = g1_values_slice[1].clone();
+    let second_point_srs_blst = g1_values_slice[1];
     let commitment_blst = g1_point_to_blst_p1(&commitment);
     assert_eq!(second_point_srs_blst, commitment_blst);
 
