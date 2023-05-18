@@ -161,6 +161,25 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
 }
 
 #[test]
+fn test_batch_proof() {
+    /*
+    // FIXME: make blobs useful
+    let blobs: Blob = [0; BYTES_PER_BLOB];
+
+    // verify blob as a batch
+    ok = false;
+    verify_blob_kzg_proof_batch(
+        &mut ok as *mut bool,
+        &blobs as *const Blob,
+        &commitment_bytes as *const Bytes48,
+        &proof_out as *const Bytes48,
+        1,
+        &s as *const KZGSettings,
+    );
+    */
+}
+
+#[test]
 fn test_read_srs() {
     let lines = std::fs::read_to_string("tests/trusted_setup.txt").unwrap();
     let lines = lines.lines();
