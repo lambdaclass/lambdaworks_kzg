@@ -12,6 +12,8 @@ CFLAGS += -DFIELD_ELEMENTS_PER_BLOB=$(FIELD_ELEMENTS_PER_BLOB)
 CFLAGS += -g -fsanitize=fuzzer
 CFLAGS += -L../target/debug
 
+export LD_LIBRARY_PATH := ../target/debug
+
 # Default to no threads, to use all cores specify -1.
 THREADS ?= 0
 ifeq ($(THREADS), -1)
@@ -82,3 +84,15 @@ fuzz_verify_blob_kzg_proof: run_fuzz_verify_blob_kzg_proof
 # Length is (3 * 4096 * 32) + (3 * 48) + (3 * 48).
 fuzz_verify_blob_kzg_proof_batch: LEN=393504
 fuzz_verify_blob_kzg_proof_batch: run_fuzz_verify_blob_kzg_proof_batch
+
+###############################################################################
+# Docker targets
+###############################################################################
+
+.PHONY: docker_build
+docker_build: 
+	docker build -t kzg-fuzz .
+
+.PHONY: docker_run
+docker_run:
+	docker run --rm -it -v $(PWD)/..:/mnt kzg-fuzz
