@@ -36,7 +36,10 @@ fn test_compute_kzg_proof_for_a_simple_poly() {
     let z_bytes: Bytes32 = FE::from(1).to_bytes_be().try_into().unwrap();
 
     // read srs from file
-    let lines = std::fs::read_to_string("tests/trusted_setup.txt").unwrap();
+    let lines = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/trusted_setup.txt"
+    ));
     let lines = lines.lines();
     let mut s = load_trusted_setup_file(lines).unwrap();
 
@@ -104,7 +107,10 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
     let z_fr = FrElement::from_bytes_be(&z_bytes).unwrap();
 
     // read srs from file
-    let lines = std::fs::read_to_string("tests/trusted_setup.txt").unwrap();
+    let lines = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/trusted_setup.txt"
+    ));
     let lines = lines.lines();
     let mut s = load_trusted_setup_file(lines).unwrap();
 
@@ -165,7 +171,10 @@ fn test_batch_proof() {
     let ok_enum_kzg = C_KZG_RET::C_KZG_OK;
 
     // read srs from file
-    let lines = std::fs::read_to_string("tests/trusted_setup.txt").unwrap();
+    let lines = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/trusted_setup.txt"
+    ));
     let lines = lines.lines();
     let s = load_trusted_setup_file(lines).unwrap();
 
@@ -252,7 +261,10 @@ fn test_batch_proof() {
 
 #[test]
 fn test_read_srs() {
-    let lines = std::fs::read_to_string("tests/trusted_setup.txt").unwrap();
+    let lines = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/trusted_setup.txt"
+    ));
     let lines = lines.lines();
     let (g1_points, g2_points) = load_trusted_setup_file_to_g1_points_and_g2_points(lines).unwrap();
 
@@ -264,7 +276,10 @@ fn test_read_srs() {
             "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
 
     let srs_from_file = vecs_to_structured_reference_string(&g1_points, &g2_points);
-    let lines = std::fs::read_to_string("tests/trusted_setup.txt").unwrap();
+    let lines = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/trusted_setup.txt"
+    ));
     let lines = lines.lines();
     let mut s = load_trusted_setup_file(lines).unwrap();
     let srs = kzgsettings_to_structured_reference_string(&s).unwrap();
