@@ -35,7 +35,8 @@ where
 /// Calculates `[coeffs_0]p_0 + [coeffs_1]p_1 + ... + [coeffs_n]p_n`
 /// where `n` is `len - 1`.
 ///
-/// This function computes the result using Pippenger's algorithm.
+/// This function computes the result using naive MSM.
+/// TODO: use Pippenger's algorithm.
 pub fn g1_lincomb(p: &[G1Point], coeff: &[UnsignedInteger<4>]) -> G1Point {
     msm(coeff, p)
 }
