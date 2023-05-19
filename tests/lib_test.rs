@@ -246,6 +246,7 @@ fn test_batch_proof() {
         &s as *const KZGSettings,
     );
 
+    assert!(ok);
     assert_eq!(ret, ok_enum_kzg);
 }
 
