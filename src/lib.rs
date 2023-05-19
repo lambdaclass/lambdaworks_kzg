@@ -635,6 +635,10 @@ fn verify_kzg_proof_batch(
     n: usize,
     s: &KZGSettings,
 ) -> Result<bool, Vec<u8>> {
+    let Ok(srs) = kzgsettings_to_structured_reference_string(s) else {
+        return Err(Vec::new());
+    };
+
     let r_powers: Vec<_> = utils::compute_r_powers(commitments_g1, zs_fr, ys_fr, proofs_g1)?
         .iter()
         .map(FieldElement::representative)
@@ -642,8 +646,9 @@ fn verify_kzg_proof_batch(
 
     let mut c_minus_y = Vec::new();
     let mut r_times_z = Vec::new();
+    let mut r_i_vec = Vec::new();
+
     // Compute \sum r^i * Proof_i
-    // TODO: let proof_lincomb = g1_lincomb(proofs_g1, &r_powers);
     let g = BLS12381Curve::generator();
 
     for i in 0..n {
@@ -655,10 +660,14 @@ fn verify_kzg_proof_batch(
 
         // Get r^i * z_i
         let r_i = FE::from(&r_powers[i]);
+        r_i_vec.push(r_i.representative());
         let zs_fr_i = zs_fr[i].clone();
         let r_times_z_elem = r_i * zs_fr_i;
         r_times_z.push(r_times_z_elem.representative());
     }
+
+    // proof_lincomb: lin comb between prof and r_powers
+    let proof_lincomb = g1_lincomb(proofs_g1, &r_i_vec);
 
     //  Get \sum r^i z_i Proof_i
     let proof_z_lincomb = g1_lincomb(proofs_g1, &r_times_z);
@@ -669,11 +678,8 @@ fn verify_kzg_proof_batch(
     // Get c_minus_y_lincomb + proof_z_lincomb
     let rhs_g1 = c_minus_y_lincomb.operate_with(&proof_z_lincomb);
 
-    let Ok(srs) = kzgsettings_to_structured_reference_string(s) else {
-        return Err(Vec::new());
-    };
     let kzg = KZG::new(srs);
-    Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_z_lincomb))
+    Ok(kzg.verify(&FE::zero(), &FE::zero(), &rhs_g1, &proof_lincomb))
 }
 
 /// Load trusted setup into a `KZGSettings`.
