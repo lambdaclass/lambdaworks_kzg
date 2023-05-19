@@ -21,7 +21,7 @@ static void initialize(void) {
         C_KZG_RET ret;
 
         /* Open the mainnet trusted setup file */
-        fp = fopen("../src/trusted_setup.txt", "r");
+        fp = fopen("../tests/trusted_setup.txt", "r");
         assert(fp != NULL);
 
         /* Load that trusted setup file */
