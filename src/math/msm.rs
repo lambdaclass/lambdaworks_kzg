@@ -37,7 +37,7 @@ where
 ///
 /// This function computes the result using Pippenger's algorithm.
 pub fn g1_lincomb(p: &[G1Point], coeff: &[UnsignedInteger<4>]) -> G1Point {
-    msm_pip(coeff, p)
+    msm(coeff, p)
 }
 
 /// This function computes the multiscalar multiplication (MSM).
