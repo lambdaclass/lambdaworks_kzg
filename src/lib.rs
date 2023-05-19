@@ -772,11 +772,11 @@ pub extern "C" fn load_trusted_setup_file(out: *mut KZGSettings, input: *mut FIL
     let mut contents: Vec<u8> = Vec::with_capacity(1024 * 1024);
     loop {
         let ret =
-            unsafe { libc::fread(buf.as_mut_ptr().cast::<libc::c_void>(), buf.len(), 1, input) };
+            unsafe { libc::fread(buf.as_mut_ptr().cast::<libc::c_void>(), 1, buf.len(), input) };
         if ret == 0 {
             break;
         }
-        contents.extend_from_slice(buf.as_slice());
+        contents.extend_from_slice(&buf[..ret]);
     }
     let Ok(contents) = String::from_utf8(contents) else {
         return C_KZG_RET::C_KZG_ERROR;
