@@ -39,7 +39,6 @@ pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G2Point = <BLS12381TwistCurve as IsEllipticCurve>::PointRepresentation;
 pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
-//pub type BLS12381TwistCurveFieldElement = FieldElement<QuadraticExtensionField<LevelTwoResidue>>;
 pub type BLS12381TwistCurveFieldElement = FieldElement<Degree2ExtensionField>;
 #[allow(clippy::upper_case_acronyms)]
 pub type FE = FrElement;
