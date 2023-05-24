@@ -12,12 +12,11 @@ use crate::math::cyclic_group::IsGroup;
 pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
     FrConfig, FrElement, FrField, MODULUS,
 };
-use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelOneResidue;
 use crate::math::elliptic_curve::traits::IsEllipticCurve;
-use crate::math::field::extensions::quadratic::QuadraticExtensionField;
 use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
 use core::ptr::null_mut;
 use libc::FILE;
+use math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::Degree2ExtensionField;
 use math::polynomial::Polynomial;
 use math::{
     elliptic_curve::short_weierstrass::{
@@ -40,7 +39,7 @@ pub type G1Point = ShortWeierstrassProjectivePoint<BLS12381Curve>;
 pub type G2Point = <BLS12381TwistCurve as IsEllipticCurve>::PointRepresentation;
 pub type KZG = KateZaveruchaGoldberg<FrField, BLS12381AtePairing>;
 pub type BLS12381FieldElement = FieldElement<BLS12381PrimeField>;
-pub type BLS12381TwistCurveFieldElement = FieldElement<QuadraticExtensionField<LevelOneResidue>>;
+pub type BLS12381TwistCurveFieldElement = FieldElement<Degree2ExtensionField>;
 #[allow(clippy::upper_case_acronyms)]
 pub type FE = FrElement;
 
