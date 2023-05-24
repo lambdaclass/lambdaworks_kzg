@@ -1,6 +1,6 @@
 use crate::math::cyclic_group::IsGroup;
 use crate::math::elliptic_curve::traits::FromAffine;
-use crate::math::field::extensions::quadratic::QuadraticExtensionFieldElement;
+use crate::math::field::element::FieldElement;
 use crate::math::{errors::ByteConversionError, traits::ByteConversion};
 use crate::sqrt::select_sqrt_value_from_third_bit;
 use crate::BLS12381TwistCurveFieldElement;
@@ -78,7 +78,7 @@ pub fn decompress_g2_point(input_bytes: &mut [u8; 96]) -> Result<G2Point, ByteCo
 
     let x0 = BLS12381FieldElement::from_bytes_be(input0).unwrap();
     let x1 = BLS12381FieldElement::from_bytes_be(input1).unwrap();
-    let x: BLS12381TwistCurveFieldElement = QuadraticExtensionFieldElement::new([x0, x1]);
+    let x: BLS12381TwistCurveFieldElement = FieldElement::new([x0, x1]);
 
     let b_param_qfe = get_four_qfe();
     let y = super::sqrt::sqrt_qfe(&(x.pow(3_u64) + b_param_qfe), 0)
