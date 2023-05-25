@@ -67,8 +67,8 @@ where
 
     // We approximate the optimum window size with: f(n) = k * log2(n), where k is a scaling factor
     let window_size =
-        ((usize::BITS - cs.len().leading_zeros() - 1) as usize * SCALE_FACTORS.0) / SCALE_FACTORS.1;
-    msm_with(cs, hidings, MIN_WINDOWS.min(window_size))
+        (cs.len().checked_ilog2().unwrap_or(0) as usize * SCALE_FACTORS.0) / SCALE_FACTORS.1;
+    msm_with(cs, hidings, MIN_WINDOWS.max(window_size))
 }
 
 pub fn msm_with<const NUM_LIMBS: usize, G>(
@@ -79,7 +79,7 @@ pub fn msm_with<const NUM_LIMBS: usize, G>(
 where
     G: IsGroup,
 {
-    debug_assert!(window_size < usize::BITS as usize);
+    let window_size = window_size.clamp(1, usize::BITS as usize);
     // The number of windows of size `s` is ceil(lambda/s).
     let num_windows = (64 * NUM_LIMBS - 1) / window_size + 1;
 
