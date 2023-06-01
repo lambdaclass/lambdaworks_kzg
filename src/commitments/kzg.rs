@@ -150,7 +150,9 @@ impl<F: IsPrimeField, P: IsPairing> KateZaveruchaGoldberg<F, P> {
     }
 }
 
-impl<const N: usize, F: IsPrimeField<RepresentativeType = UnsignedInteger<N>>, P: IsPairing> IsCommitmentScheme<F> for KateZaveruchaGoldberg<F, P> {
+impl<const N: usize, F: IsPrimeField<RepresentativeType = UnsignedInteger<N>>, P: IsPairing>
+    IsCommitmentScheme<F> for KateZaveruchaGoldberg<F, P>
+{
     type Commitment = P::G1Point;
 
     fn commit(&self, p: &Polynomial<FieldElement<F>>) -> Self::Commitment {
