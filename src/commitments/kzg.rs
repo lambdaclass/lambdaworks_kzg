@@ -4,9 +4,10 @@ use crate::math::{
     cyclic_group::IsGroup,
     elliptic_curve::{short_weierstrass::errors::DeserializationError, traits::IsPairing},
     field::{element::FieldElement, traits::IsPrimeField},
-    msm::msm,
+    msm::msm_pip,
     polynomial::Polynomial,
     traits::{Deserializable, Serializable},
+    unsigned_integer::element::UnsignedInteger,
 };
 use std::{marker::PhantomData, mem};
 
@@ -149,27 +150,27 @@ impl<F: IsPrimeField, P: IsPairing> KateZaveruchaGoldberg<F, P> {
     }
 }
 
-impl<F: IsPrimeField, P: IsPairing> IsCommitmentScheme<F> for KateZaveruchaGoldberg<F, P> {
+impl<const N: usize, F: IsPrimeField<RepresentativeType = UnsignedInteger<N>>, P: IsPairing>
+    IsCommitmentScheme<F> for KateZaveruchaGoldberg<F, P>
+{
     type Commitment = P::G1Point;
 
-    #[allow(unused)]
     fn commit(&self, p: &Polynomial<FieldElement<F>>) -> Self::Commitment {
-        let coefficients: Vec<F::RepresentativeType> = p
+        let coefficients: Vec<_> = p
             .coefficients
             .iter()
             .map(|coefficient| coefficient.representative())
             .collect();
-        msm(
+        msm_pip(
             &coefficients,
             &self.srs.powers_main_group[..coefficients.len()],
         )
     }
 
-    #[allow(unused)]
     fn open(
         &self,
         x: &FieldElement<F>,
-        y: &FieldElement<F>,
+        _y: &FieldElement<F>,
         p: &Polynomial<FieldElement<F>>,
     ) -> Self::Commitment {
         let value = p.evaluate(x);
@@ -178,7 +179,6 @@ impl<F: IsPrimeField, P: IsPairing> IsCommitmentScheme<F> for KateZaveruchaGoldb
         self.commit(&(numerator / denominator))
     }
 
-    #[allow(unused)]
     fn verify(
         &self,
         x: &FieldElement<F>,
