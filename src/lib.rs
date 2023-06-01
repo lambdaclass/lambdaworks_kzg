@@ -1,24 +1,19 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref, clippy::module_name_repetitions)]
 
-pub mod commitments;
-pub mod compress;
-pub mod math;
-pub mod sqrt;
 pub mod srs;
 pub mod utils;
 
-use crate::compress::{compress_g1_point, decompress_g1_point, decompress_g2_point};
-use crate::math::cyclic_group::IsGroup;
-pub use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
-    FrConfig, FrElement, FrField, MODULUS,
-};
-use crate::math::elliptic_curve::traits::IsEllipticCurve;
-use commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
 use core::ptr::null_mut;
-use libc::FILE;
-use math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::Degree2ExtensionField;
-use math::polynomial::Polynomial;
-use math::{
+use lambdaworks_crypto::commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
+use lambdaworks_math::cyclic_group::IsGroup;
+pub use lambdaworks_math::elliptic_curve::short_weierstrass::curves::bls12_381::default_types::{
+    FrConfig, FrElement, FrField,
+};
+use lambdaworks_math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::Degree2ExtensionField;
+use lambdaworks_math::elliptic_curve::traits::{Compress, IsEllipticCurve};
+use lambdaworks_math::polynomial::Polynomial;
+use lambdaworks_math::unsigned_integer::element::UnsignedInteger;
+use lambdaworks_math::{
     elliptic_curve::short_weierstrass::{
         curves::bls12_381::{
             curve::BLS12381Curve, field_extension::BLS12381PrimeField, pairing::BLS12381AtePairing,
@@ -27,9 +22,10 @@ use math::{
         point::ShortWeierstrassProjectivePoint,
     },
     field::element::FieldElement,
-    msm::g1_lincomb,
+    msm::pippenger::msm,
     traits::ByteConversion,
 };
+use libc::FILE;
 pub use srs::{
     g1_point_to_blst_p1, g2_point_to_blst_p2, kzgsettings_to_structured_reference_string,
 };
@@ -232,6 +228,17 @@ impl Default for KZGSettings {
     }
 }
 
+/// Calculate a linear combination of G1 group elements.
+///
+/// Calculates `[coeffs_0]p_0 + [coeffs_1]p_1 + ... + [coeffs_n]p_n`
+/// where `n` is `len - 1`.
+///
+/// This function computes the result using naive MSM.
+/// TODO: use Pippenger's algorithm.
+pub fn g1_lincomb(p: &[G1Point], coeff: &[UnsignedInteger<4>]) -> G1Point {
+    msm(coeff, p).unwrap()
+}
+
 #[no_mangle]
 /// Convert a blob to a KZG commitment.
 ///
@@ -258,7 +265,7 @@ pub extern "C" fn blob_to_kzg_commitment(
     };
     let kzg = KZG::new(srs);
     let commitment: ShortWeierstrassProjectivePoint<BLS12381Curve> = kzg.commit(&polynomial);
-    let Ok(commitment_bytes) = compress_g1_point(&commitment) else {
+    let Ok(commitment_bytes) = G1Point::compress_g1_point(&commitment) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -317,7 +324,7 @@ pub extern "C" fn compute_kzg_proof(
     };
     let kzg = KZG::new(srs);
     let proof = kzg.open(&fr_z, &fr_y, &polynomial);
-    let Ok(compressed_proof) = compress_g1_point(&proof) else {
+    let Ok(compressed_proof) = G1Point::compress_g1_point(&proof) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -360,7 +367,7 @@ pub extern "C" fn compute_blob_kzg_proof(
     let s_struct = unsafe { (*s).clone() };
 
     // Do conversions first to fail fast, compute_challenge is expensive
-    let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
+    let Ok(commitment_g1) = G1Point::decompress_g1_point(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
     let Ok(polynomial) = utils::blob_to_polynomial(&input_blob) else {
@@ -382,7 +389,7 @@ pub extern "C" fn compute_blob_kzg_proof(
     };
     let kzg = KZG::new(srs);
     let proof = kzg.open(&fr_z, &fr_y, &polynomial);
-    let Ok(compressed_proof) = compress_g1_point(&proof) else {
+    let Ok(compressed_proof) = G1Point::compress_g1_point(&proof) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -411,7 +418,7 @@ pub extern "C" fn verify_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
+    let Ok(commitment_g1) = G1Point::decompress_g1_point(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -423,7 +430,7 @@ pub extern "C" fn verify_kzg_proof(
         return C_KZG_RET::C_KZG_ERROR;
     };
 
-    let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
+    let Ok(proof_g1) = G1Point::decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
 
@@ -460,10 +467,10 @@ pub extern "C" fn verify_blob_kzg_proof(
     let mut proof_slice = unsafe { *proof_bytes };
     let s_struct = unsafe { (*s).clone() };
 
-    let Ok(commitment_g1) = decompress_g1_point(&mut commitment_slice) else {
+    let Ok(commitment_g1) = G1Point::decompress_g1_point(&mut commitment_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
-    let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
+    let Ok(proof_g1) = G1Point::decompress_g1_point(&mut proof_slice) else {
         return C_KZG_RET::C_KZG_ERROR;
     };
     let Ok(polynomial) = utils::blob_to_polynomial(&input_blob) else {
@@ -552,7 +559,7 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
             for i in 0..n {
                 // fill the vector of commitments
                 let mut g1_point_compressed = commitments_slice_array[i];
-                let Ok(commitment_g1) = decompress_g1_point(&mut g1_point_compressed) else {
+                let Ok(commitment_g1) = G1Point::decompress_g1_point(&mut g1_point_compressed) else {
                     return C_KZG_RET::C_KZG_ERROR;
                 };
 
@@ -579,7 +586,7 @@ pub extern "C" fn verify_blob_kzg_proof_batch(
                 polynomial_vec.push(polynomial);
 
                 let mut proof_slice = proofs_slice_array[i];
-                let Ok(proof_g1) = decompress_g1_point(&mut proof_slice) else {
+                let Ok(proof_g1) = G1Point::decompress_g1_point(&mut proof_slice) else {
                     return C_KZG_RET::C_KZG_ERROR;
                 };
                 proofs_vec.push(proof_g1);
@@ -832,7 +839,7 @@ pub unsafe extern "C" fn free_trusted_setup(s: *mut KZGSettings) -> C_KZG_RET {
 /// * `in` - b   The proof/commitment bytes
 ///
 fn validate_kzg_g1(b_slice: &mut [u8; 48]) -> Result<g1_t, C_KZG_RET> {
-    let Ok(point) = decompress_g1_point(b_slice) else {
+    let Ok(point) = G1Point::decompress_g1_point(b_slice) else {
         return Err(C_KZG_RET::C_KZG_ERROR);
     };
 
@@ -840,7 +847,7 @@ fn validate_kzg_g1(b_slice: &mut [u8; 48]) -> Result<g1_t, C_KZG_RET> {
 }
 
 fn blst_p2_uncompress(b_slice: &mut [u8; 96]) -> Result<g2_t, C_KZG_RET> {
-    let Ok(point) = decompress_g2_point(b_slice) else {
+    let Ok(point) = G1Point::decompress_g2_point(b_slice) else {
         return Err(C_KZG_RET::C_KZG_ERROR);
     };
 
