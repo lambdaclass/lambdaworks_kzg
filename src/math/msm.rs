@@ -38,7 +38,7 @@ where
 /// This function computes the result using naive MSM.
 /// TODO: use Pippenger's algorithm.
 pub fn g1_lincomb(p: &[G1Point], coeff: &[UnsignedInteger<4>]) -> G1Point {
-    msm(coeff, p)
+    msm_pip(coeff, p)
 }
 
 /// This function computes the multiscalar multiplication (MSM).
@@ -80,6 +80,7 @@ where
     G: IsGroup,
 {
     let window_size = window_size.clamp(1, usize::BITS as usize);
+
     // The number of windows of size `s` is ceil(lambda/s).
     let num_windows = (64 * NUM_LIMBS - 1) / window_size + 1;
 
