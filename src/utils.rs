@@ -1,12 +1,18 @@
-use crate::commitments::kzg::StructuredReferenceString;
-use crate::compress::compress_g1_point;
-use crate::math::cyclic_group::IsGroup;
-use crate::math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelThreeResidue;
-use crate::math::elliptic_curve::traits::IsEllipticCurve;
-use crate::math::errors::ByteConversionError;
-use crate::math::field::extensions::quadratic::QuadraticExtensionField;
-use crate::math::unsigned_integer::element::U256;
-use crate::math::{
+use crate::traits::Compress;
+use crate::FieldElement;
+use crate::{
+    G1Point, G2Point, BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT, FE, FIAT_SHAMIR_PROTOCOL_DOMAIN,
+    FIELD_ELEMENTS_PER_BLOB, G1, RANDOM_CHALLENGE_KZG_BATCH_DOMAIN,
+};
+use itertools::izip;
+use lambdaworks_crypto::commitments::kzg::StructuredReferenceString;
+use lambdaworks_math::cyclic_group::IsGroup;
+use lambdaworks_math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelThreeResidue;
+use lambdaworks_math::elliptic_curve::traits::IsEllipticCurve;
+use lambdaworks_math::errors::ByteConversionError;
+use lambdaworks_math::field::extensions::quadratic::QuadraticExtensionField;
+use lambdaworks_math::unsigned_integer::element::U256;
+use lambdaworks_math::{
     elliptic_curve::{
         short_weierstrass::curves::bls12_381::{
             curve::BLS12381Curve, pairing::BLS12381AtePairing, twist::BLS12381TwistCurve,
@@ -16,12 +22,6 @@ use crate::math::{
     polynomial::Polynomial,
     traits::ByteConversion,
 };
-use crate::FieldElement;
-use crate::{
-    G1Point, G2Point, BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT, FE, FIAT_SHAMIR_PROTOCOL_DOMAIN,
-    FIELD_ELEMENTS_PER_BLOB, G1, RANDOM_CHALLENGE_KZG_BATCH_DOMAIN,
-};
-use itertools::izip;
 use rand::Rng;
 
 pub fn blob_to_polynomial(
@@ -134,7 +134,11 @@ pub fn compute_challenge(
         .chain(FIELD_ELEMENTS_PER_BLOB.to_le_bytes().into_iter())
         .chain(0_u64.to_le_bytes().into_iter())
         .chain(blob.iter().copied())
-        .chain(compress_g1_point(commitment_g1)?.into_iter())
+        .chain(
+            G1Point::compress_g1_point(commitment_g1)
+                .map_err(|_| Vec::new())?
+                .into_iter(),
+        )
         .collect::<Vec<u8>>();
     hash_field_unsafe(&input_hash)
 }
@@ -180,10 +184,18 @@ pub fn compute_r_powers(
     ) {
         // TODO: make it beautiful
         let mut input_hash = Vec::<u8>::new();
-        input_hash.extend_from_slice(compress_g1_point(commitment)?.as_slice());
+        input_hash.extend_from_slice(
+            G1Point::compress_g1_point(commitment)
+                .map_err(|_| Vec::new())?
+                .as_slice(),
+        );
         input_hash.extend_from_slice(&z.to_bytes_be());
         input_hash.extend_from_slice(&y.to_bytes_be());
-        input_hash.extend_from_slice(compress_g1_point(proof)?.as_slice());
+        input_hash.extend_from_slice(
+            G1Point::compress_g1_point(proof)
+                .map_err(|_| Vec::new())?
+                .as_slice(),
+        );
 
         bytes.append(&mut input_hash);
     }
@@ -226,9 +238,9 @@ pub fn pairings_verify(a1: &G1Point, a2: &G2Point, b1: &G1Point, b2: &G2Point) -
 #[cfg(test)]
 mod tests {
     use super::{blob_to_polynomial, polynomial_to_blob_with_size};
-    use crate::math::field::element::FieldElement;
-    use crate::math::polynomial::Polynomial;
     use crate::FE;
+    use lambdaworks_math::field::element::FieldElement;
+    use lambdaworks_math::polynomial::Polynomial;
 
     #[test]
     fn test_poly_to_blob_and_viceversa() {

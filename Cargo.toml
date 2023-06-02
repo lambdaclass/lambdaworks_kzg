@@ -12,6 +12,8 @@ hex = "0.4"
 sha256 = "1.1"
 itertools = "0.10"
 libc = "0.2"
+lambdaworks-math = { git = "https://github.com/lambdaclass/lambdaworks.git" }
+lambdaworks-crypto = { git = "https://github.com/lambdaclass/lambdaworks.git" }
 
 [dev-dependencies]
 proptest = "1.1.0"
@@ -19,6 +21,7 @@ criterion = "0.4"
 const-random = "0.1.15"
 iai = "0.1"
 pretty_assertions = "1.3"
+hex = "0.4"
 
 [lib]
 crate-type = ["cdylib", "staticlib", "lib"]

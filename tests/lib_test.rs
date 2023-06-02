@@ -1,18 +1,18 @@
-use lambdaworks_kzg::commitments::traits::IsCommitmentScheme;
-use lambdaworks_kzg::compress::{compress_g1_point, decompress_g1_point};
-use lambdaworks_kzg::math::{
-    cyclic_group::IsGroup, field::element::FieldElement, polynomial::Polynomial,
-    traits::ByteConversion,
-};
+use lambdaworks_crypto::commitments::traits::IsCommitmentScheme;
 use lambdaworks_kzg::srs::{
     g1_point_to_blst_p1, load_trusted_setup_file,
     load_trusted_setup_file_to_g1_points_and_g2_points, vecs_to_structured_reference_string,
 };
+use lambdaworks_kzg::traits::Compress;
 use lambdaworks_kzg::utils::polynomial_to_blob_with_size;
 use lambdaworks_kzg::{
     blst_p1, compute_kzg_proof, free_trusted_setup, kzgsettings_to_structured_reference_string,
     verify_blob_kzg_proof_batch, verify_kzg_proof, Blob, Bytes32, Bytes48, FrElement, G1Point,
     KZGProof, KZGSettings, BYTES_PER_BLOB, C_KZG_RET, FE,
+};
+use lambdaworks_math::{
+    cyclic_group::IsGroup, field::element::FieldElement, polynomial::Polynomial,
+    traits::ByteConversion,
 };
 use pretty_assertions::assert_eq;
 
@@ -61,13 +61,13 @@ fn test_compute_kzg_proof_for_a_simple_poly() {
     assert_eq!(one_fr, y_out_fr);
 
     // proof is inf
-    let p = decompress_g1_point(&mut proof_out).unwrap();
+    let p = G1Point::decompress_g1_point(&mut proof_out).unwrap();
     let inf = G1Point::neutral_element();
     assert_eq!(p, inf);
 
     let kzg = lambdaworks_kzg::KZG::new(lambdaworks_kzg::utils::create_srs());
     let commitment = kzg.commit(&polynomial);
-    let commitment_bytes = compress_g1_point(&commitment).unwrap();
+    let commitment_bytes = G1Point::compress_g1_point(&commitment).unwrap();
 
     let mut ok = false;
     let ret_verify = verify_kzg_proof(
@@ -133,7 +133,7 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
     let srs = kzgsettings_to_structured_reference_string(&s).unwrap();
     let kzg = lambdaworks_kzg::KZG::new(srs);
     let commitment = kzg.commit(&polynomial);
-    let commitment_bytes = compress_g1_point(&commitment).unwrap();
+    let commitment_bytes = G1Point::compress_g1_point(&commitment).unwrap();
 
     let mut ok = false;
     let ret_verify = verify_kzg_proof(
@@ -153,7 +153,7 @@ fn test_compute_kzg_proof_for_a_simple_poly_2() {
     let g1_values_slice: &[blst_p1] =
         unsafe { std::slice::from_raw_parts(s.g1_values as *const blst_p1, 4096) };
     let first_point_srs_blst = g1_values_slice[0];
-    let proof_out_point = decompress_g1_point(&mut proof_out).unwrap();
+    let proof_out_point = G1Point::decompress_g1_point(&mut proof_out).unwrap();
     let proof_out_point_blst = g1_point_to_blst_p1(&proof_out_point);
     assert_eq!(first_point_srs_blst, proof_out_point_blst);
 
@@ -236,10 +236,10 @@ fn test_batch_proof() {
     let srs = kzgsettings_to_structured_reference_string(&s).unwrap();
     let kzg = lambdaworks_kzg::KZG::new(srs);
     let commitment1 = kzg.commit(&polynomial);
-    let commitment_bytes1 = compress_g1_point(&commitment1).unwrap();
+    let commitment_bytes1 = G1Point::compress_g1_point(&commitment1).unwrap();
 
     let commitment2 = kzg.commit(&polynomial2);
-    let commitment_bytes2 = compress_g1_point(&commitment2).unwrap();
+    let commitment_bytes2 = G1Point::compress_g1_point(&commitment2).unwrap();
     let mut commitment_bytes_batch = [0_u8; 96];
     commitment_bytes_batch[..48].copy_from_slice(&commitment_bytes1);
     commitment_bytes_batch[48..].copy_from_slice(&commitment_bytes2);
@@ -269,7 +269,7 @@ fn test_read_srs() {
     let (g1_points, g2_points) = load_trusted_setup_file_to_g1_points_and_g2_points(lines).unwrap();
 
     let g = g1_points[0].clone();
-    let compressed = compress_g1_point(&g).unwrap();
+    let compressed = G1Point::compress_g1_point(&g).unwrap();
     let hex_string = hex::encode(compressed);
 
     assert_eq!(hex_string,

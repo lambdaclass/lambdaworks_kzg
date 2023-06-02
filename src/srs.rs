@@ -1,16 +1,15 @@
-use crate::commitments::kzg::StructuredReferenceString;
-use crate::compress::{decompress_g1_point, decompress_g2_point};
-use crate::math::cyclic_group::IsGroup;
-use crate::math::errors::ByteConversionError;
-use crate::math::{elliptic_curve::traits::FromAffine, traits::ByteConversion};
 use crate::{
-    blst_fp, blst_fp2, blst_p1, blst_p2, BLS12381FieldElement, BLS12381TwistCurveFieldElement,
-    G2Point, KZGSettings, G1, NUM_G1_POINTS, NUM_G2_POINTS,
+    blst_fp, blst_fp2, blst_p1, blst_p2, traits::Compress, BLS12381FieldElement,
+    BLS12381TwistCurveFieldElement, G1Point, G2Point, KZGSettings, G1, NUM_G1_POINTS,
+    NUM_G2_POINTS,
 };
 use core::ptr::null_mut;
+use lambdaworks_crypto::commitments::kzg::StructuredReferenceString;
+use lambdaworks_math::cyclic_group::IsGroup;
+use lambdaworks_math::errors::ByteConversionError;
+use lambdaworks_math::{elliptic_curve::traits::FromAffine, traits::ByteConversion};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
-
 use std::path::Path;
 
 /// Helper function that reads a file line by line and
@@ -60,8 +59,8 @@ pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
             hex::decode_to_slice(line, &mut g1_bytes)
                 .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
-            let g1_point =
-                decompress_g1_point(&mut g1_bytes).map_err(|_| std::io::ErrorKind::InvalidData)?;
+            let g1_point = G1Point::decompress_g1_point(&mut g1_bytes)
+                .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
             g1_points.push(g1_point);
         } else if pos < num_total_points {
@@ -69,8 +68,8 @@ pub fn load_trusted_setup_file_to_g1_points_and_g2_points(
             hex::decode_to_slice(line, &mut g2_bytes)
                 .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
-            let g2_point =
-                decompress_g2_point(&mut g2_bytes).map_err(|_| std::io::ErrorKind::InvalidData)?;
+            let g2_point = G1Point::decompress_g2_point(&mut g2_bytes)
+                .map_err(|_| std::io::ErrorKind::InvalidData)?;
 
             g2_points.push(g2_point);
         } else {
@@ -169,7 +168,7 @@ pub fn blst_p1_to_g1_point(point: &blst_p1) -> Result<G1, ByteConversionError> {
         .flat_map(|e| e.to_be_bytes())
         .collect::<Vec<u8>>();
     let y = BLS12381FieldElement::from_bytes_be(&y_field)?;
-    G1::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)
+    G1::from_affine(x, y).map_err(|_| ByteConversionError::FromBEBytesError)
 }
 
 #[must_use]
@@ -244,7 +243,7 @@ pub fn blst_p2_to_g2_point(point: &blst_p2) -> Result<G2Point, ByteConversionErr
 
     let x = BLS12381TwistCurveFieldElement::new([x0_field, x1_field]);
     let y = BLS12381TwistCurveFieldElement::new([y0_field, y1_field]);
-    G2Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)
+    G2Point::from_affine(x, y).map_err(|_| ByteConversionError::FromBEBytesError)
 }
 
 #[must_use]
@@ -252,7 +251,8 @@ pub fn vecs_to_structured_reference_string(
     g1_points: &[G1],
     g2_points: &[G2Point],
 ) -> StructuredReferenceString<G1, G2Point> {
-    StructuredReferenceString::<G1, G2Point>::new(g1_points, g2_points)
+    let g2_points_arr = [g2_points[0].clone(), g2_points[1].clone()];
+    StructuredReferenceString::<G1, G2Point>::new(g1_points, &g2_points_arr)
 }
 
 pub fn kzgsettings_to_structured_reference_string(
@@ -271,8 +271,11 @@ pub fn kzgsettings_to_structured_reference_string(
         g2_points_slice.iter().map(blst_p2_to_g2_point).collect();
     let g2_points = g2_points?;
 
+    let g2_points_arr = [g2_points[0].clone(), g2_points[1].clone()];
+
     Ok(StructuredReferenceString::<G1, G2Point>::new(
-        &g1_points, &g2_points,
+        &g1_points,
+        &g2_points_arr,
     ))
 }
 
