@@ -3,13 +3,13 @@ use lambdaworks_kzg::srs::{
     g1_point_to_blst_p1, load_trusted_setup_file,
     load_trusted_setup_file_to_g1_points_and_g2_points, vecs_to_structured_reference_string,
 };
+use lambdaworks_kzg::traits::Compress;
 use lambdaworks_kzg::utils::polynomial_to_blob_with_size;
 use lambdaworks_kzg::{
     blst_p1, compute_kzg_proof, free_trusted_setup, kzgsettings_to_structured_reference_string,
     verify_blob_kzg_proof_batch, verify_kzg_proof, Blob, Bytes32, Bytes48, FrElement, G1Point,
     KZGProof, KZGSettings, BYTES_PER_BLOB, C_KZG_RET, FE,
 };
-use lambdaworks_math::elliptic_curve::traits::Compress;
 use lambdaworks_math::{
     cyclic_group::IsGroup, field::element::FieldElement, polynomial::Polynomial,
     traits::ByteConversion,

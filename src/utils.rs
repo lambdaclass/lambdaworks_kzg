@@ -1,3 +1,4 @@
+use crate::traits::Compress;
 use crate::FieldElement;
 use crate::{
     G1Point, G2Point, BYTES_PER_BLOB, BYTES_PER_FIELD_ELEMENT, FE, FIAT_SHAMIR_PROTOCOL_DOMAIN,
@@ -7,7 +8,7 @@ use itertools::izip;
 use lambdaworks_crypto::commitments::kzg::StructuredReferenceString;
 use lambdaworks_math::cyclic_group::IsGroup;
 use lambdaworks_math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::LevelThreeResidue;
-use lambdaworks_math::elliptic_curve::traits::{Compress, IsEllipticCurve};
+use lambdaworks_math::elliptic_curve::traits::IsEllipticCurve;
 use lambdaworks_math::errors::ByteConversionError;
 use lambdaworks_math::field::extensions::quadratic::QuadraticExtensionField;
 use lambdaworks_math::unsigned_integer::element::U256;

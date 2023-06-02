@@ -1,11 +1,11 @@
 use crate::{
-    blst_fp, blst_fp2, blst_p1, blst_p2, BLS12381FieldElement, BLS12381TwistCurveFieldElement,
-    G1Point, G2Point, KZGSettings, G1, NUM_G1_POINTS, NUM_G2_POINTS,
+    blst_fp, blst_fp2, blst_p1, blst_p2, traits::Compress, BLS12381FieldElement,
+    BLS12381TwistCurveFieldElement, G1Point, G2Point, KZGSettings, G1, NUM_G1_POINTS,
+    NUM_G2_POINTS,
 };
 use core::ptr::null_mut;
 use lambdaworks_crypto::commitments::kzg::StructuredReferenceString;
 use lambdaworks_math::cyclic_group::IsGroup;
-use lambdaworks_math::elliptic_curve::traits::Compress;
 use lambdaworks_math::errors::ByteConversionError;
 use lambdaworks_math::{elliptic_curve::traits::FromAffine, traits::ByteConversion};
 use std::fs::File;
@@ -168,7 +168,7 @@ pub fn blst_p1_to_g1_point(point: &blst_p1) -> Result<G1, ByteConversionError> {
         .flat_map(|e| e.to_be_bytes())
         .collect::<Vec<u8>>();
     let y = BLS12381FieldElement::from_bytes_be(&y_field)?;
-    G1::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)
+    G1::from_affine(x, y).map_err(|_| ByteConversionError::FromBEBytesError)
 }
 
 #[must_use]
@@ -243,7 +243,7 @@ pub fn blst_p2_to_g2_point(point: &blst_p2) -> Result<G2Point, ByteConversionErr
 
     let x = BLS12381TwistCurveFieldElement::new([x0_field, x1_field]);
     let y = BLS12381TwistCurveFieldElement::new([y0_field, y1_field]);
-    G2Point::from_affine(x, y).map_err(|_| ByteConversionError::InvalidValue)
+    G2Point::from_affine(x, y).map_err(|_| ByteConversionError::FromBEBytesError)
 }
 
 #[must_use]

@@ -1,8 +1,11 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref, clippy::module_name_repetitions)]
 
+pub mod compression;
 pub mod srs;
+pub mod traits;
 pub mod utils;
 
+use crate::traits::Compress;
 use core::ptr::null_mut;
 use lambdaworks_crypto::commitments::{kzg::KateZaveruchaGoldberg, traits::IsCommitmentScheme};
 use lambdaworks_math::cyclic_group::IsGroup;
@@ -10,7 +13,7 @@ pub use lambdaworks_math::elliptic_curve::short_weierstrass::curves::bls12_381::
     FrConfig, FrElement, FrField,
 };
 use lambdaworks_math::elliptic_curve::short_weierstrass::curves::bls12_381::field_extension::Degree2ExtensionField;
-use lambdaworks_math::elliptic_curve::traits::{Compress, IsEllipticCurve};
+use lambdaworks_math::elliptic_curve::traits::IsEllipticCurve;
 use lambdaworks_math::polynomial::Polynomial;
 use lambdaworks_math::unsigned_integer::element::UnsignedInteger;
 use lambdaworks_math::{
